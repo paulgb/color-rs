@@ -17,6 +17,7 @@ use num;
 use num::traits::{self, Float, Zero, Saturating};
 use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
 use std::slice;
+use std::mem;
 
 use angle::*;
 
@@ -40,62 +41,62 @@ impl<T:Channel> Rgb<T> {
     pub fn new(r: T, g: T, b: T) -> Rgb<T> {
         Rgb { r: r, g: g, b: b }
     }
-    
+
     #[inline]
     pub fn rg(&self) -> Rg<T> {
         Rg{r: self.r, g: self.g}
     }
-    
+
     #[inline]
     pub fn rb(&self) -> Rg<T> {
         Rg{r: self.r, g: self.b}
     }
-    
+
     #[inline]
     pub fn gr(&self) -> Rg<T> {
         Rg{r: self.g, g: self.r}
     }
-    
+
     #[inline]
     pub fn gb(&self) -> Rg<T> {
         Rg{r: self.g, g: self.b}
     }
-    
+
     #[inline]
     pub fn br(&self) -> Rg<T> {
         Rg{r: self.b, g: self.r}
     }
-    
+
     #[inline]
     pub fn bg(&self) -> Rg<T> {
         Rg{r: self.b, g: self.g}
     }
-    
+
     #[inline]
     pub fn rgb(&self) -> Rgb<T> {
         Rgb{r: self.r, g: self.g, b: self.b}
     }
-    
+
     #[inline]
     pub fn rbg(&self) -> Rgb<T> {
         Rgb{r: self.r, g: self.b, b: self.g}
     }
-    
+
     #[inline]
     pub fn bgr(&self) -> Rgb<T> {
         Rgb{r: self.b, g: self.g, b: self.r}
     }
-    
+
     #[inline]
     pub fn brg(&self) -> Rgb<T> {
         Rgb{r: self.b, g: self.r, b: self.g}
     }
-    
+
     #[inline]
     pub fn grb(&self) -> Rgb<T> {
         Rgb{r: self.g, g: self.r, b: self.b}
     }
-    
+
     #[inline]
     pub fn gbr(&self) -> Rgb<T> {
         Rgb{r: self.g, g: self.b, b: self.r}
@@ -105,13 +106,13 @@ impl<T:Channel> Rgb<T> {
 #[macro_export]
 macro_rules! rgb{
     ( $r: expr, $g: expr, $b: expr ) => {
-        $crate::Rgb{ r: $r, g: $g, b: $b } 
+        $crate::Rgb{ r: $r, g: $g, b: $b }
     };
     ( $rg: expr, $b: expr ) => {
-        $crate::Rgb{ r: $rg.r, g: $rg.g, b: $b } 
+        $crate::Rgb{ r: $rg.r, g: $rg.g, b: $b }
     };
     ( $r: expr, $gb: expr ) => {
-        $crate::Rgb{ r: $r, g: $gb.r, b: $gb.g } 
+        $crate::Rgb{ r: $r, g: $gb.r, b: $gb.g }
     };
 }
 
@@ -139,12 +140,12 @@ impl<T:Channel> Color<T> for Rgb<T> {
                  self.g.invert_channel(),
                  self.b.invert_channel())
     }
-    
+
     #[inline]
     fn mix(self, other: Self, value: T) -> Self {
         rgb!(self.r.mix(other.r, value),
              self.g.mix(other.g, value),
-             self.b.mix(other.b, value)) 
+             self.b.mix(other.b, value))
     }
 }
 
@@ -167,10 +168,10 @@ impl ToRgb for u32 {
     fn to_rgb<U:Channel>(&self) -> Rgb<U> {
         let r: u8 = cast((*self >> 16) & 0xff);
         let g: u8 = cast((*self >> 8) & 0xff);
-        let b: u8 = cast((*self >> 0) & 0xff); 
+        let b: u8 = cast((*self >> 0) & 0xff);
         let r: U = Channel::from(r);
         let g: U = Channel::from(g);
-        let b: U = Channel::from(b); 
+        let b: U = Channel::from(b);
         rgb!(r, g, b)
     }
 }
@@ -264,7 +265,7 @@ impl<T:Channel + Saturating> Saturating for Rgb<T> {
             self.g.saturating_add(v.g),
             self.b.saturating_add(v.b))
     }
-    
+
     fn saturating_sub(self, v: Rgb<T>) -> Rgb<T> {
         Rgb::new(self.r.saturating_sub(v.r),
             self.g.saturating_sub(v.g),
@@ -285,15 +286,15 @@ impl<T> IndexMut<usize> for Rgb<T> {
     }
 }
 
-impl<T> AsRef<[T]> for Rgb<T> {
-    fn as_ref(&self) -> &[T] {
-        unsafe{ slice::from_raw_parts(&self.r, 3) }
+impl<T> AsRef<[T;3]> for Rgb<T> {
+    fn as_ref(&self) -> &[T;3] {
+        unsafe{ mem::transmute(self) }
     }
 }
 
-impl<T> AsMut<[T]> for Rgb<T> {
-    fn as_mut(&mut self) -> &mut [T] {
-        unsafe{ slice::from_raw_parts_mut(&mut self.r, 3) }
+impl<T> AsMut<[T;3]> for Rgb<T> {
+    fn as_mut(&mut self) -> &mut [T;3] {
+        unsafe{ mem::transmute(self) }
     }
 }
 
@@ -492,7 +493,7 @@ mod tests {
         assert_eq!(Rgb::<u8>::new(0x00, 0x99, 0x00).to_hsv::<f32>(), Hsv::<f32>::new(Deg(120.0), 1.0, 0.6));
         assert_eq!(Rgb::<u8>::new(0x00, 0x00, 0x99).to_hsv::<f32>(), Hsv::<f32>::new(Deg(240.0), 1.0, 0.6));
     }
-    
+
     #[test]
     fn test_rgb_ops(){
         assert_eq!( rgb!(20u8, 20, 20) + rgb!(20, 20, 20), rgb!(40, 40, 40) );

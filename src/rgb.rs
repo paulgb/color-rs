@@ -13,10 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use num;
-use num::traits::{self, Float, Zero, Saturating};
+use num_traits::{self, Zero, Saturating, NumCast};
 use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
-use std::slice;
 use std::mem;
 
 use angle::*;
@@ -32,8 +30,8 @@ pub struct Rgb<T> { pub r: T, pub g: T, pub b: T }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Rg<T> { pub r: T, pub g: T }
 
-fn cast<T: num::NumCast, U: num::NumCast>(n: T) -> U {
-    traits::cast(n).unwrap()
+fn cast<T: num_traits::NumCast, U: num_traits::NumCast>(n: T) -> U {
+    num_traits::cast(n).unwrap()
 }
 
 impl<T:Channel> Rgb<T> {
@@ -298,9 +296,9 @@ impl<T> AsMut<[T;3]> for Rgb<T> {
     }
 }
 
-impl<T:Channel> ToHsv for Rgb<T> {
+impl<T:Channel + NumCast> ToHsv for Rgb<T> {
     #[inline]
-    fn to_hsv<U:Channel>(&self) -> Hsv<U> {
+    fn to_hsv<U:Channel + NumCast>(&self) -> Hsv<U> {
         // Algorithm taken from the Wikipedia article on HSL and Hsv:
         // http://en.wikipedia.org/wiki/HSL_and_Hsv#From_Hsv
 

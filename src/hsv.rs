@@ -13,8 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use num::{self, zero};
-use num::traits::{Float, Zero};
+use num_traits::{self, zero};
+use num_traits::NumCast;
 use angle::*;
 
 use {Color, FloatColor};
@@ -22,11 +22,11 @@ use {Channel, FloatChannel};
 use {Rgb, ToRgb};
 
 #[inline]
-fn cast<T: num::NumCast, U: num::NumCast>(n: T) -> U {
-    num::traits::cast(n).unwrap()
+fn cast<T: num_traits::NumCast, U: num_traits::NumCast>(n: T) -> U {
+    num_traits::cast(n).unwrap()
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Hsv<T: Channel> { pub h: Deg<T>, pub s: T, pub v: T }
 
 impl<T: Channel> Hsv<T> {
@@ -35,7 +35,7 @@ impl<T: Channel> Hsv<T> {
     }
 }
 
-impl<T: Channel> Color<T> for Hsv<T> {
+impl<T: Channel + NumCast> Color<T> for Hsv<T> {
     /// Clamps the components of the color to the range `(lo,hi)`.
     #[inline]
     fn clamp_s(self, lo: T, hi: T) -> Hsv<T> {
@@ -59,7 +59,7 @@ impl<T: Channel> Color<T> for Hsv<T> {
                  self.s.invert_channel(),
                  self.v.invert_channel())
     }
-    
+
     #[inline]
     fn mix(self, other: Self, value: T) -> Self {
         self.to_rgb().mix(other.to_rgb(),value).to_hsv() // TODO: can we mix the hsv directly?
@@ -78,7 +78,7 @@ impl<T: FloatChannel> FloatColor<T> for Hsv<T> {
 }
 
 pub trait ToHsv {
-    fn to_hsv<U:Channel>(&self) -> Hsv<U>;
+    fn to_hsv<U:Channel + NumCast>(&self) -> Hsv<U>;
 }
 
 impl ToHsv for u32 {
@@ -112,7 +112,7 @@ impl<T:Clone + Channel> ToRgb for Hsv<T> {
             let gray = Channel::from(self.v);
             rgb!(gray, gray, gray)
         } else {
-            let max_f: f64 = cast(T::max()); 
+            let max_f: f64 = cast(T::max());
             let hue: f64 = cast(self.h.wrap().value());
             let hue_six: f64 = hue / 360f64 * 6f64;
             let hue_six_cat: usize = cast(hue_six);

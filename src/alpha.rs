@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
-use num::Saturating;
+use num_traits::Saturating;
 use std::mem;
 use {Color, Channel, FloatChannel};
 use {Rgb, Rg, ToRgb, Hsv, Srgb, YCbCr};

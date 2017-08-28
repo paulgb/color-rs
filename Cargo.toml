@@ -11,5 +11,5 @@ name = "color"
 path = "src/lib.rs"
 
 [dependencies]
-num = "0.1"
-angle = "0.1"
+num-traits = "0.1"
+angle = "0.3"

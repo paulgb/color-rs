@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-extern crate num;
+extern crate num_traits;
 extern crate angle;
 
 pub use alpha::AlphaColor;
@@ -44,4 +44,3 @@ pub trait Color<T>: Copy {
 pub trait FloatColor<T>: Color<T> {
     fn saturate(self) -> Self;
 }
-

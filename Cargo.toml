@@ -1,15 +1,10 @@
 [package]
 
-name = "color"
-version = "0.0.2"
-authors = ["Brendan Zabarauskas <bjzaba@yahoo.com.au>", "Luqman Aden", "Arturo Castro"]
-description = "A library that provides types and conversions for working with various color formats."
-
-[lib]
-
-name = "color"
-path = "src/lib.rs"
+name = "colors"
+version = "0.1.0"
+authors = ["Arturo Castro", "Brendan Zabarauskas <bjzaba@yahoo.com.au>", "Luqman Aden"]
+description = "A library that provides types and conversions for working with various color formats. Forked from the unmuntained crate color"
 
 [dependencies]
-num-traits = "0.1"
+num-traits = "0.2"
 angle = "0.3"

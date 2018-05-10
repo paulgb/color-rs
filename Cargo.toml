@@ -1,10 +1,13 @@
 [package]
 name = "color-rs"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Arturo Castro", "Brendan Zabarauskas <bjzaba@yahoo.com.au>", "Luqman Aden"]
 description = "A library that provides types and conversions for working with various color formats. Forked from the unmuntained crate color"
 license-file="LICENSE"
 repository="https://github.com/arturoc/colors-rs"
+
+[lib]
+name="color"
 
 [dependencies]
 num-traits = "0.2"

@@ -24,10 +24,10 @@ use {Color, FloatColor};
 use {Channel, FloatChannel};
 use {Hsv, ToHsv};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Rgb<T> { pub r: T, pub g: T, pub b: T }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Rg<T> { pub r: T, pub g: T }
 
 fn cast<T: num_traits::NumCast, U: num_traits::NumCast>(n: T) -> U {

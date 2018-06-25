@@ -19,7 +19,7 @@ use std::mem;
 use {Color, Channel, FloatChannel};
 use {Rgb, Rg, ToRgb, Hsv, Srgb, YCbCr};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct AlphaColor<T, C> { pub c: C, pub a: T }
 
 pub type Rgba<T> = AlphaColor<T, Rgb<T>>;

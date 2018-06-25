@@ -14,6 +14,8 @@
 // limitations under the License.
 extern crate num_traits;
 extern crate angle;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
 
 pub use alpha::AlphaColor;
 pub use alpha::{Rgba, Hsva, Srgba, YCbCra, ToRgba};

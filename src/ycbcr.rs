@@ -15,7 +15,7 @@
 
 //! http://en.wikipedia.org/wiki/YCbCr
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct YCbCr<T> { pub y: T, pub cb: T, pub cr: T }
 
 impl<T> YCbCr<T> {

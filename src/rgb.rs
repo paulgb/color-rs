@@ -476,7 +476,7 @@ mod tests {
     use {Rgb, ToRgb};
     use FloatColor;
     use angle::*;
-    use num::Saturating;
+    use num_traits::Saturating;
 
     #[test]
     fn test_rgb_to_rgb() {

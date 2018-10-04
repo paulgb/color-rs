@@ -26,7 +26,7 @@ fn cast<T: num_traits::NumCast, U: num_traits::NumCast>(n: T) -> U {
     num_traits::cast(n).unwrap()
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug,PartialEq)]
 pub struct Hsv<T: Channel> { pub h: Deg<T>, pub s: T, pub v: T }
 
 impl<T: Channel> Hsv<T> {

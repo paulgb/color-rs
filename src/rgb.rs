@@ -40,6 +40,13 @@ impl<T:Channel> Rgb<T> {
         Rgb { r: r, g: g, b: b }
     }
 
+    pub fn from_hex(hex: u32) -> Rgb<T> {
+        let r = hex >> 16 & 0xFF;
+        let g = hex >> 8 & 0xFF;
+        let b = hex & 0xFF;
+        Rgb::<u8>::new(r as u8, g as u8, b as u8).to_rgb()
+    }
+
     #[inline]
     pub fn rg(&self) -> Rg<T> {
         Rg{r: self.r, g: self.g}

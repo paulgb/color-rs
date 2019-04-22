@@ -77,6 +77,14 @@ macro_rules! rgba{
 }
 
 impl<T:Channel> Rgba<T> {
+    pub fn from_hex(hex: u32) -> Rgba<T> {
+        let r = hex >> 24 & 0xFF;
+        let g = hex >> 16 & 0xFF;
+        let b = hex >> 8 & 0xFF;
+        let a = hex & 0xFF;
+        Rgba{c: Rgb::new(r as u8, g as u8, b as u8), a: a as u8}.to_rgba()
+    }
+
     #[inline]
     pub fn rg(&self) -> Rg<T> {
         self.c.rg()

@@ -12,3 +12,5 @@ name="color"
 [dependencies]
 num-traits = "0.2"
 angle = "0.4"
+serde={version = "1"}
+serde_derive={version = "1"}

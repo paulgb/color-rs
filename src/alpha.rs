@@ -14,18 +14,27 @@
 // limitations under the License.
 
 use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
+use color_space::TransferFunction;
 use num_traits::Saturating;
 use std::mem;
-use {Color, Channel, FloatChannel};
-use {Rgb, Rg, ToRgb, Hsv, Srgb, YCbCr};
+use {Color, Channel};
+use {Rgb, Rg, ToRgb, Hsv, YCbCr};
+use color_space::{Srgb, LinearRgb};
+use luma::{Luma, ToLuma};
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 pub struct AlphaColor<T, C> { pub c: C, pub a: T }
 
-pub type Rgba<T> = AlphaColor<T, Rgb<T>>;
-pub type Hsva<T> = AlphaColor<T, Hsv<T>>;
-pub type Srgba<T> = AlphaColor<T, Srgb<T>>;
+pub type Rgba<T = u8, S = Srgb> = AlphaColor<T, Rgb<T,S>>;
+pub type LumaA<T = f32, S = Srgb> = AlphaColor<T, Luma<T,S>>;
+pub type Hsva<T = f32, S = Srgb> = AlphaColor<T, Hsv<T,S>>;
 pub type YCbCra<T> = AlphaColor<T, YCbCr<T>>;
+
+impl<T, C> AlphaColor<T, C>{
+    pub const fn new(c: C, a: T) -> AlphaColor<T,C>{
+        AlphaColor{c, a}
+    }
+}
 
 impl<T: Channel, C: Color<T>> Color<T> for AlphaColor<T, C> {
     /// Clamps the components of the color to the range `(lo,hi)`.
@@ -68,7 +77,7 @@ impl<T: Channel, C: Color<T>> Color<T> for AlphaColor<T, C> {
 macro_rules! rgba{
     ( $r: expr, $g: expr, $b: expr, $a: expr ) => ({
         use $crate::{Rgba, Rgb};
-        Rgba{ c: Rgb{ r: $r, g: $g, b: $b }, a: $a }
+        Rgba{ c: Rgb::<_,$crate::color_space::Srgb>::new($r, $g, $b), a: $a }
     });
     ( $to_rgb: expr, $a: expr ) => ({
         use $crate::{Rgba,ToRgb};
@@ -76,8 +85,20 @@ macro_rules! rgba{
     });
 }
 
-impl<T:Channel> Rgba<T> {
-    pub fn from_hex(hex: u32) -> Rgba<T> {
+#[macro_export]
+macro_rules! rgba_linear{
+    ( $r: expr, $g: expr, $b: expr, $a: expr ) => ({
+        use $crate::{Rgba, Rgb};
+        Rgba{ c: Rgb::<_,$crate::color_space::LinearRgb>::new($r, $g, $b), a: $a }
+    });
+    ( $to_rgb: expr, $a: expr ) => ({
+        use $crate::{Rgba,ToRgb};
+        Rgba{ c: $to_rgb.to_rgb().to_linear(), a: $a }
+    });
+}
+
+impl<T:Channel, S: TransferFunction> Rgba<T, S> {
+    pub fn from_hex(hex: u32) -> Rgba<T, S> {
         let r = hex >> 24 & 0xFF;
         let g = hex >> 16 & 0xFF;
         let b = hex >> 8 & 0xFF;
@@ -86,329 +107,345 @@ impl<T:Channel> Rgba<T> {
     }
 
     #[inline]
-    pub fn rg(&self) -> Rg<T> {
+    pub fn rg(&self) -> Rg<T, S> {
         self.c.rg()
     }
 
     #[inline]
-    pub fn rb(&self) -> Rg<T> {
+    pub fn rb(&self) -> Rg<T, S> {
         self.c.rb()
     }
 
     #[inline]
-    pub fn gr(&self) -> Rg<T> {
+    pub fn gr(&self) -> Rg<T, S> {
         self.c.gr()
     }
 
     #[inline]
-    pub fn gb(&self) -> Rg<T> {
+    pub fn gb(&self) -> Rg<T, S> {
         self.c.gb()
     }
 
     #[inline]
-    pub fn br(&self) -> Rg<T> {
+    pub fn br(&self) -> Rg<T, S> {
         self.c.br()
     }
 
     #[inline]
-    pub fn bg(&self) -> Rg<T> {
+    pub fn bg(&self) -> Rg<T, S> {
         self.c.bg()
     }
 
     #[inline]
-    pub fn ar(&self) -> Rg<T> {
-        Rg{r: self.a, g: self.c.r}
+    pub fn ar(&self) -> Rg<T, S> {
+        Rg::new(self.a, self.c.r)
     }
 
     #[inline]
-    pub fn ag(&self) -> Rg<T> {
-        Rg{r: self.a, g: self.c.g}
+    pub fn ag(&self) -> Rg<T, S> {
+        Rg::new(self.a, self.c.g)
     }
 
     #[inline]
-    pub fn ab(&self) -> Rg<T> {
-        Rg{r: self.a, g: self.c.b}
+    pub fn ab(&self) -> Rg<T, S> {
+        Rg::new(self.a, self.c.b)
     }
 
     #[inline]
-    pub fn ra(&self) -> Rg<T> {
-        Rg{r: self.c.r, g: self.a}
+    pub fn ra(&self) -> Rg<T, S> {
+        Rg::new(self.c.r, self.a)
     }
 
     #[inline]
-    pub fn ga(&self) -> Rg<T> {
-        Rg{r: self.c.g, g: self.a}
+    pub fn ga(&self) -> Rg<T, S> {
+        Rg::new(self.c.g, self.a)
     }
 
     #[inline]
-    pub fn ba(&self) -> Rg<T> {
-        Rg{r: self.c.b, g: self.a}
+    pub fn ba(&self) -> Rg<T, S> {
+        Rg::new(self.c.b, self.a)
     }
 
     #[inline]
-    pub fn rgb(&self) -> Rgb<T> {
+    pub fn rgb(&self) -> Rgb<T, S> {
         self.c.rgb()
     }
 
     #[inline]
-    pub fn rbg(&self) -> Rgb<T> {
+    pub fn rbg(&self) -> Rgb<T, S> {
         self.c.rbg()
     }
 
     #[inline]
-    pub fn bgr(&self) -> Rgb<T> {
+    pub fn bgr(&self) -> Rgb<T, S> {
         self.c.bgr()
     }
 
     #[inline]
-    pub fn brg(&self) -> Rgb<T> {
+    pub fn brg(&self) -> Rgb<T, S> {
         self.c.brg()
     }
 
     #[inline]
-    pub fn grb(&self) -> Rgb<T> {
+    pub fn grb(&self) -> Rgb<T, S> {
         self.c.grb()
     }
 
     #[inline]
-    pub fn gbr(&self) -> Rgb<T> {
+    pub fn gbr(&self) -> Rgb<T, S> {
         self.c.gbr()
     }
 
     #[inline]
-    pub fn rga(&self) -> Rgb<T> {
-        rgb!(self.c.r,self.c.g,self.a)
+    pub fn rga(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.r,self.c.g,self.a)
     }
 
     #[inline]
-    pub fn rba(&self) -> Rgb<T> {
-        rgb!(self.c.r,self.c.b,self.a)
+    pub fn rba(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.r,self.c.b,self.a)
     }
 
     #[inline]
-    pub fn bra(&self) -> Rgb<T> {
-        rgb!(self.c.b,self.c.r,self.a)
+    pub fn bra(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.b,self.c.r,self.a)
     }
 
     #[inline]
-    pub fn bga(&self) -> Rgb<T> {
-        rgb!(self.c.b,self.c.g,self.a)
+    pub fn bga(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.b,self.c.g,self.a)
     }
 
     #[inline]
-    pub fn gra(&self) -> Rgb<T> {
-        rgb!(self.c.g,self.c.r,self.a)
+    pub fn gra(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.g,self.c.r,self.a)
     }
 
     #[inline]
-    pub fn gba(&self) -> Rgb<T> {
-        rgb!(self.c.g,self.c.b,self.a)
+    pub fn gba(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.g,self.c.b,self.a)
     }
 
     #[inline]
-    pub fn arg(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.r,self.c.g)
+    pub fn arg(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.r,self.c.g)
     }
 
     #[inline]
-    pub fn arb(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.r,self.c.b)
+    pub fn arb(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.r,self.c.b)
     }
 
     #[inline]
-    pub fn agr(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.g,self.c.r)
+    pub fn agr(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.g,self.c.r)
     }
 
     #[inline]
-    pub fn agb(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.g,self.c.b)
+    pub fn agb(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.g,self.c.b)
     }
 
     #[inline]
-    pub fn abr(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.b,self.c.r)
+    pub fn abr(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.b,self.c.r)
     }
 
     #[inline]
-    pub fn abg(&self) -> Rgb<T> {
-        rgb!(self.a,self.c.b,self.c.g)
+    pub fn abg(&self) -> Rgb<T, S> {
+        Rgb::new(self.a,self.c.b,self.c.g)
     }
 
     #[inline]
-    pub fn rag(&self) -> Rgb<T> {
-        rgb!(self.c.r,self.a,self.c.g)
+    pub fn rag(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.r,self.a,self.c.g)
     }
 
     #[inline]
-    pub fn rab(&self) -> Rgb<T> {
-        rgb!(self.c.r,self.a,self.c.b)
+    pub fn rab(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.r,self.a,self.c.b)
     }
 
     #[inline]
-    pub fn gar(&self) -> Rgb<T> {
-        rgb!(self.c.g,self.a,self.c.r)
+    pub fn gar(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.g,self.a,self.c.r)
     }
 
     #[inline]
-    pub fn gab(&self) -> Rgb<T> {
-        rgb!(self.c.g,self.a,self.c.b)
+    pub fn gab(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.g,self.a,self.c.b)
     }
 
     #[inline]
-    pub fn bar(&self) -> Rgb<T> {
-        rgb!(self.c.b,self.a,self.c.r)
+    pub fn bar(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.b,self.a,self.c.r)
     }
 
     #[inline]
-    pub fn bag(&self) -> Rgb<T> {
-        rgb!(self.c.b,self.a,self.c.g)
+    pub fn bag(&self) -> Rgb<T, S> {
+        Rgb::new(self.c.b,self.a,self.c.g)
     }
 
     #[inline]
-    pub fn rgba(&self) -> Rgba<T> {
+    pub fn rgba(&self) -> Rgba<T, S> {
         rgba!(self.c, self.a)
     }
 
     #[inline]
-    pub fn rbga(&self) -> Rgba<T> {
-        rgba!(self.c.r, self.c.b, self.c.g, self.a)
+    pub fn rbga(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.r, self.c.b, self.c.g), self.a)
     }
 
     #[inline]
-    pub fn grba(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.c.r, self.c.b, self.a)
+    pub fn grba(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.c.r, self.c.b), self.a)
     }
 
     #[inline]
-    pub fn gbra(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.c.b, self.c.r, self.a)
+    pub fn gbra(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.c.b, self.c.r), self.a)
     }
 
     #[inline]
-    pub fn brga(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.c.r, self.c.g, self.a)
+    pub fn brga(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.c.r, self.c.g), self.a)
     }
 
     #[inline]
-    pub fn bgra(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.c.g, self.c.r, self.a)
+    pub fn bgra(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.c.g, self.c.r), self.a)
     }
 
     #[inline]
-    pub fn argb(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.r, self.c.g, self.c.b)
+    pub fn argb(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.r, self.c.g), self.c.b)
     }
 
     #[inline]
-    pub fn arbg(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.r, self.c.b, self.c.g)
+    pub fn arbg(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.r, self.c.b), self.c.g)
     }
 
     #[inline]
-    pub fn agrb(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.g, self.c.r, self.c.b)
+    pub fn agrb(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.g, self.c.r), self.c.b)
     }
 
     #[inline]
-    pub fn agbr(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.g, self.c.b, self.c.r)
+    pub fn agbr(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.g, self.c.b), self.c.r)
     }
 
     #[inline]
-    pub fn abrg(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.b, self.c.r, self.c.g)
+    pub fn abrg(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.b, self.c.r), self.c.g)
     }
 
     #[inline]
-    pub fn abgr(&self) -> Rgba<T> {
-        rgba!(self.a, self.c.b, self.c.g, self.c.r)
+    pub fn abgr(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.a, self.c.b, self.c.g), self.c.r)
     }
 
     #[inline]
-    pub fn ragb(&self) -> Rgba<T> {
-        rgba!(self.c.r, self.a, self.c.g, self.c.b)
+    pub fn ragb(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.r, self.a, self.c.g), self.c.b)
     }
 
     #[inline]
-    pub fn rabg(&self) -> Rgba<T> {
-        rgba!(self.c.r, self.a, self.c.b, self.c.g)
+    pub fn rabg(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.r, self.a, self.c.b), self.c.g)
     }
 
     #[inline]
-    pub fn garb(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.a, self.c.r, self.c.b)
+    pub fn garb(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.a, self.c.r), self.c.b)
     }
 
     #[inline]
-    pub fn gabr(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.a, self.c.b, self.c.r)
+    pub fn gabr(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.a, self.c.b), self.c.r)
     }
 
     #[inline]
-    pub fn barg(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.a, self.c.r, self.c.g)
+    pub fn barg(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.a, self.c.r), self.c.g)
     }
 
     #[inline]
-    pub fn bagr(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.a, self.c.g, self.c.r)
+    pub fn bagr(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.a, self.c.g), self.c.r)
     }
 
     #[inline]
-    pub fn rgab(&self) -> Rgba<T> {
-        rgba!(self.c.r, self.c.g, self.a, self.c.b)
+    pub fn rgab(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.r, self.c.g, self.a), self.c.b)
     }
 
     #[inline]
-    pub fn rbag(&self) -> Rgba<T> {
-        rgba!(self.c.r, self.c.b, self.a, self.c.g)
+    pub fn rbag(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.r, self.c.b, self.a), self.c.g)
     }
 
     #[inline]
-    pub fn grab(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.c.r, self.a, self.c.b)
+    pub fn grab(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.c.r, self.a), self.c.b)
     }
 
     #[inline]
-    pub fn gbar(&self) -> Rgba<T> {
-        rgba!(self.c.g, self.c.b, self.a, self.c.r)
+    pub fn gbar(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.g, self.c.b, self.a), self.c.r)
     }
 
     #[inline]
-    pub fn brag(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.c.r, self.a, self.c.g)
+    pub fn brag(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.c.r, self.a), self.c.g)
     }
 
     #[inline]
-    pub fn bgar(&self) -> Rgba<T> {
-        rgba!(self.c.b, self.c.g, self.a, self.c.r)
+    pub fn bgar(&self) -> Rgba<T, S> {
+        Rgba::new(Rgb::new(self.c.b, self.c.g, self.a), self.c.r)
+    }
+}
+
+impl<T: Channel, S: TransferFunction> Rgba<T, S> {
+    pub fn to_standard<S2: TransferFunction>(&self) -> Rgba<T, S2>{
+        let c = self.c.to_standard();
+        Rgba{c, a: self.a}
+    }
+
+    pub fn to_linear(&self) -> Rgba<T, LinearRgb>{
+        let c = self.c.to_linear();
+        Rgba{c, a: self.a}
     }
 }
 
 
 pub trait ToRgba{
-    fn to_rgba<T: Channel>(&self) -> Rgba<T>;
+    type Standard: TransferFunction;
+    fn to_rgba<T: Channel>(&self) -> Rgba<T, Self::Standard>;
 }
 
 impl<T: Channel, C: ToRgb> ToRgba for AlphaColor<T,C>{
+    type Standard = <C as ToRgb>::Standard;
     #[inline]
-    fn to_rgba<U: Channel>(&self) -> Rgba<U>{
+    fn to_rgba<U: Channel>(&self) -> Rgba<U, Self::Standard>{
         Rgba{c: self.c.to_rgb(), a: self.a.to_channel()}
     }
 }
 
-impl<T: Channel> ToRgba for Rgb<T> {
+impl<T, C: ToRgb> ToRgb for AlphaColor<T, C> {
+    type Standard = <C as ToRgb>::Standard;
     #[inline]
-    fn to_rgba<U: Channel>(&self) -> Rgba<U>{
-        Rgba{c: self.to_rgb(), a: 1.0f32.to_channel()}
+    fn to_rgb<U:Channel>(&self) -> Rgb<U, Self::Standard> {
+        self.c.to_rgb()
     }
 }
 
-impl<T:Clone + FloatChannel> ToRgba for Hsv<T> {
+impl<T, C: ToLuma> ToLuma for AlphaColor<T, C> {
+    type Standard = <C as ToLuma>::Standard;
     #[inline]
-    fn to_rgba<U: Channel>(&self) -> Rgba<U>{
-        Rgba{c: self.to_rgb(), a: 1.0f32.to_channel()}
+    fn to_luma<U:Channel>(&self) -> Luma<U, Self::Standard> {
+        self.c.to_luma()
     }
 }
 

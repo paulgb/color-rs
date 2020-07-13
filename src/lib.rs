@@ -15,23 +15,34 @@
 extern crate num_traits;
 extern crate angle;
 extern crate serde;
+extern crate half;
 #[macro_use] extern crate serde_derive;
 
 pub use alpha::AlphaColor;
-pub use alpha::{Rgba, Hsva, Srgba, YCbCra, ToRgba};
+pub use alpha::{Rgba, Hsva, YCbCra, ToRgba, LumaA};
 pub use channel::{Channel, FloatChannel};
 pub use hsv::{Hsv, ToHsv};
 pub use rgb::{Rgb, Rg, ToRgb, consts};
-pub use srgb::Srgb;
+// pub use srgb::{Srgb, ToSrgb};
 pub use ycbcr::YCbCr;
 pub use angle::Deg;
+pub use luma::{Luma, ToLuma};
+pub use xyz::{Xyz, ToXyz};
+// pub use color_space::{MatrixColorSpace, WhitePoint, TransferFunction, Srgb};
+pub use yxy::{Yxy, ToYxy};
+pub use lab::{Lab, ToLab};
 
 #[macro_use] mod rgb;
 #[macro_use] mod alpha;
 mod channel;
 mod hsv;
-mod srgb;
+// pub mod srgb;
 mod ycbcr;
+mod luma;
+mod xyz;
+mod yxy;
+mod lab;
+pub mod color_space;
 
 pub trait Color<T>: Copy {
     fn clamp_s(self, lo: T, hi: T) -> Self;

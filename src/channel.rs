@@ -15,16 +15,22 @@
 
 //! Color channel conversions and utility methods
 
-use num_traits::{Float, NumCast, Num, zero, one};
-use std::{u8, u16};
+use num_traits::{Float, zero, one};
+use std::{u8, u16, u32};
+use half::f16;
 
-pub trait Channel: Copy + Sized + PartialOrd + PartialEq + Num + NumCast{
+pub trait Channel: Copy + Sized + PartialOrd + PartialEq {
+    type NearestFloat: Float + Channel;
+
     fn from<T:Channel>(chan: T) -> Self;
     fn to_channel<T:Channel>(self) -> T { Channel::from(self) }
     fn to_channel_u8(self)  -> u8;
     fn to_channel_u16(self) -> u16;
+    fn to_channel_u32(self) -> u32;
+    fn to_channel_f16(self) -> f16;
     fn to_channel_f32(self) -> f32;
     fn to_channel_f64(self) -> f64;
+    fn to_nearest_precision_float(self) -> Self::NearestFloat;
 
     fn invert_channel(self) -> Self;
 
@@ -49,43 +55,126 @@ pub trait Channel: Copy + Sized + PartialOrd + PartialEq + Num + NumCast{
     }
 
     fn max() -> Self;
-
-    #[inline]
-    fn mix(self, rhs: Self, value: Self) -> Self {
-        (self + (rhs - self).normalized_mul(value))
-    }
+    fn mix(self, rhs: Self, value: Self) -> Self;
+    fn zero() -> Self;
 }
 
 impl Channel for u8 {
+    type NearestFloat = f32;
     #[inline] fn from<T:Channel>(chan: T) -> u8 { chan.to_channel_u8() }
     #[inline] fn to_channel_u8(self)  -> u8  { self }
     #[inline] fn to_channel_u16(self) -> u16 { ((self as u16) << 8) | self as u16 }
-    #[inline] fn to_channel_f32(self) -> f32 { (self as f32) / (0xFF_u8 as f32) }
-    #[inline] fn to_channel_f64(self) -> f64 { (self as f64) / (0xFF_u8 as f64) }
+    #[inline] fn to_channel_u32(self) -> u32 { ((self as u32) << 16) | self as u32 }
+    #[inline] fn to_channel_f16(self) -> f16 { f16::from_f32(self.to_channel_f32()) }
+    #[inline] fn to_channel_f32(self) -> f32 { self as f32 / u8::MAX as f32 }
+    #[inline] fn to_channel_f64(self) -> f64 { self as f64 / u8::MAX as f64 }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self.to_channel_f32() }
 
     #[inline] fn invert_channel(self) -> u8 { !self }
 
     #[inline] fn max() -> u8{ u8::MAX }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        self + (rhs - self).normalized_mul(value)
+    }
+    fn zero() -> Self{
+        0
+    }
 }
 
 impl Channel for u16 {
+    type NearestFloat = f32;
     #[inline] fn from<T:Channel>(chan: T) -> u16 { chan.to_channel_u16() }
     #[inline] fn to_channel_u8(self)  -> u8  { (self >> 8) as u8 }
     #[inline] fn to_channel_u16(self) -> u16 { self }
-    #[inline] fn to_channel_f32(self) -> f32 { (self / 0xFFFF) as f32 }
-    #[inline] fn to_channel_f64(self) -> f64 { (self / 0xFFFF) as f64 }
+    #[inline] fn to_channel_u32(self) -> u32 { ((self as u32) << 8) | self as u32 }
+    #[inline] fn to_channel_f16(self) -> f16 { f16::from_f32(self.to_channel_f32()) }
+    #[inline] fn to_channel_f32(self) -> f32 { self as f32 / u16::MAX as f32 }
+    #[inline] fn to_channel_f64(self) -> f64 { self as f64 / u16::MAX as f64 }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self.to_channel_f32() }
 
     #[inline] fn invert_channel(self) -> u16 { !self }
 
     #[inline] fn max() -> u16{ u16::MAX }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        self + (rhs - self).normalized_mul(value)
+    }
+    fn zero() -> Self{
+        0
+    }
+}
+
+impl Channel for u32 {
+    type NearestFloat = f32;
+    #[inline] fn from<T:Channel>(chan: T) -> u32 { chan.to_channel_u32() }
+    #[inline] fn to_channel_u8(self)  -> u8  { (self >> 16) as u8 }
+    #[inline] fn to_channel_u16(self) -> u16 { (self >> 8) as u16 }
+    #[inline] fn to_channel_u32(self) -> u32 { self }
+    #[inline] fn to_channel_f16(self) -> f16 { f16::from_f32(self.to_channel_f32()) }
+    #[inline] fn to_channel_f32(self) -> f32 { self as f32 / u32::MAX as f32 }
+    #[inline] fn to_channel_f64(self) -> f64 { self as f64 / u32::MAX as f64 }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self.to_channel_f32() }
+
+    #[inline] fn invert_channel(self) -> u32 { !self }
+
+    #[inline] fn max() -> u32{ u32::MAX }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        self + (rhs - self).normalized_mul(value)
+    }
+    fn zero() -> Self{
+        0
+    }
+}
+
+impl Channel for f16 {
+    type NearestFloat = f32;
+    #[inline] fn from<T:Channel>(chan: T) -> f16 { chan.to_channel_f16() }
+    #[inline] fn to_channel_u8(self)  -> u8  { (self.to_f32() * u8::MAX as f32) as u8 }
+    #[inline] fn to_channel_u16(self) -> u16 { (self.to_f32() * u16::MAX as f32) as u16 }
+    #[inline] fn to_channel_u32(self) -> u32 { (self.to_f32() * u32::MAX as f32) as u32 }
+    #[inline] fn to_channel_f16(self) -> f16 { self }
+    #[inline] fn to_channel_f32(self) -> f32 { self.to_f32() }
+    #[inline] fn to_channel_f64(self) -> f64 { self.to_f64() }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self.to_channel_f32() }
+
+    #[inline] fn invert_channel(self) -> f16 { f16::from_f32(1.0 - self.to_f32()) }
+
+    #[inline]
+    fn normalized_mul(self, rhs: Self) -> Self {
+        f16::from_f32(self.to_f32() * rhs.to_f32())
+    }
+
+    #[inline]
+    fn normalized_div(self, rhs: Self) -> Self {
+        f16::from_f32(self.to_f32() / rhs.to_f32())
+    }
+
+    #[inline] fn max() -> f16{ f16::from_f32(1.0) }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        f16::from_f32(self.to_f32().mix(rhs.to_f32(), value.to_f32()))
+    }
+    fn zero() -> Self{
+        f16::ZERO
+    }
 }
 
 impl Channel for f32 {
+    type NearestFloat = f32;
     #[inline] fn from<T:Channel>(chan: T) -> f32 { chan.to_channel_f32() }
-    #[inline] fn to_channel_u8(self)  -> u8  { (self * (0xFF_u8 as f32)) as u8 }
-    #[inline] fn to_channel_u16(self) -> u16 { (self * (0xFFFF_u16 as f32)) as u16 }
+    #[inline] fn to_channel_u8(self)  -> u8  { (self * (u8::MAX as f32)) as u8 }
+    #[inline] fn to_channel_u16(self) -> u16 { (self * (u16::MAX as f32)) as u16 }
+    #[inline] fn to_channel_u32(self) -> u32 { (self * (u32::MAX as f32)) as u32 }
+    #[inline] fn to_channel_f16(self) -> f16 { f16::from_f32(self) }
     #[inline] fn to_channel_f32(self) -> f32 { self }
     #[inline] fn to_channel_f64(self) -> f64 { self as f64 }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self }
 
     #[inline] fn invert_channel(self) -> f32 { 1.0 - self }
 
@@ -100,14 +189,26 @@ impl Channel for f32 {
     }
 
     #[inline] fn max() -> f32{ 1.0 }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        self + (rhs - self).normalized_mul(value)
+    }
+    fn zero() -> Self{
+        0.
+    }
 }
 
 impl Channel for f64 {
+    type NearestFloat = f64;
     #[inline] fn from<T:Channel>(chan: T) -> f64 { chan.to_channel_f64() }
-    #[inline] fn to_channel_u8(self)  -> u8  { (self * (0xFF_u8 as f64)) as u8 }
-    #[inline] fn to_channel_u16(self) -> u16 { (self * (0xFFFF_u16 as f64)) as u16 }
+    #[inline] fn to_channel_u8(self)  -> u8  { (self * u8::MAX as f64) as u8 }
+    #[inline] fn to_channel_u16(self) -> u16 { (self * u16::MAX as f64) as u16 }
+    #[inline] fn to_channel_u32(self) -> u32 { (self * u32::MAX as f64) as u32 }
+    #[inline] fn to_channel_f16(self) -> f16 { f16::from_f64(self) }
     #[inline] fn to_channel_f32(self) -> f32 { self as f32 }
     #[inline] fn to_channel_f64(self) -> f64 { self }
+    #[inline] fn to_nearest_precision_float(self) -> Self::NearestFloat{ self }
 
     #[inline] fn invert_channel(self) -> f64 { 1.0 - self }
 
@@ -122,6 +223,14 @@ impl Channel for f64 {
     }
 
     #[inline] fn max() -> f64{ 1.0 }
+
+    #[inline]
+    fn mix(self, rhs: Self, value: Self) -> Self {
+        self + (rhs - self).normalized_mul(value)
+    }
+    fn zero() -> Self{
+        0.
+    }
 }
 
 pub trait FloatChannel: Float + Channel {

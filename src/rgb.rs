@@ -13,118 +13,197 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use num_traits::{self, Zero, Saturating, NumCast};
+use num_traits::{self, Zero, Saturating, NumCast, Num, Float};
 use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
+use std::marker::PhantomData;
 use std::mem;
-
+use color_space::{TransferFunction, Srgb, LinearRgb, MatrixColorSpace, D65, Vec3};
 use angle::*;
 
-use AlphaColor;
 use {Color, FloatColor};
 use {Channel, FloatChannel};
 use {Hsv, ToHsv};
+use {Luma, ToLuma};
+use xyz::{Xyz, ToXyz};
+use alpha::{ToRgba, Rgba};
+use std::fmt::{self, Debug};
+
+#[derive(Serialize, Deserialize)]
+pub struct Rgb<T = u8, S = Srgb> { pub r: T, pub g: T, pub b: T, standard: PhantomData<S> }
+
+impl<T: Clone,S> Clone for Rgb<T, S>{
+    fn clone(&self) -> Rgb<T, S>{
+        Rgb{ r: self.r.clone(), g: self.g.clone(), b: self.b.clone(), standard: PhantomData }
+    }
+}
+
+impl<T: Copy, S> Copy for Rgb<T, S>{}
+
+impl<N: Clone + PartialEq + Num + NumCast, S> PartialEq for Rgb<N, S>{
+	#[inline]
+	fn eq(&self, other: &Rgb<N, S>) -> bool{
+		self.r.eq(&other.r) && self.g.eq(&other.g) && self.b.eq(&other.b)
+	}
+}
+
+impl<N: Clone + PartialEq + Eq + Num + NumCast, S> Eq for Rgb<N, S>{}
+
+impl<T: Debug, S: Default + Debug> Debug for Rgb<T,S>{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Rgb")
+            .field("r", &self.r)
+            .field("g", &self.g)
+            .field("b", &self.b)
+            .field("standard", &S::default())
+            .finish()
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Rgb<T> { pub r: T, pub g: T, pub b: T }
+pub struct Rg<T = u8, S = Srgb> { pub r: T, pub g: T, pub standard: PhantomData<S> }
 
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Rg<T> { pub r: T, pub g: T }
+impl<T, S> Rg<T, S>{
+    pub const fn new(r: T, g: T) -> Rg<T,S>{
+        Rg{r, g, standard: PhantomData}
+    }
+}
 
 fn cast<T: num_traits::NumCast, U: num_traits::NumCast>(n: T) -> U {
     num_traits::cast(n).unwrap()
 }
 
-impl<T:Channel> Rgb<T> {
+impl<T, S> Rgb<T, S> {
     #[inline]
-    pub fn new(r: T, g: T, b: T) -> Rgb<T> {
-        Rgb { r: r, g: g, b: b }
+    pub const fn new(r: T, g: T, b: T) -> Rgb<T, S> {
+        Rgb { r: r, g: g, b: b, standard: PhantomData }
     }
+}
 
-    pub fn from_hex(hex: u32) -> Rgb<T> {
+impl<T: Channel, S: TransferFunction> Rgb<T, S> {
+    pub fn from_hex(hex: u32) -> Rgb<T, S> {
         let r = hex >> 16 & 0xFF;
         let g = hex >> 8 & 0xFF;
         let b = hex & 0xFF;
-        Rgb::<u8>::new(r as u8, g as u8, b as u8).to_rgb()
+        Rgb::<u8, S>::new(r as u8, g as u8, b as u8).to_rgb()
     }
 
     #[inline]
-    pub fn rg(&self) -> Rg<T> {
-        Rg{r: self.r, g: self.g}
+    pub fn rg(&self) -> Rg<T, S> {
+        Rg{r: self.r, g: self.g, standard: PhantomData}
     }
 
     #[inline]
-    pub fn rb(&self) -> Rg<T> {
-        Rg{r: self.r, g: self.b}
+    pub fn rb(&self) -> Rg<T, S> {
+        Rg{r: self.r, g: self.b, standard: PhantomData}
     }
 
     #[inline]
-    pub fn gr(&self) -> Rg<T> {
-        Rg{r: self.g, g: self.r}
+    pub fn gr(&self) -> Rg<T, S> {
+        Rg{r: self.g, g: self.r, standard: PhantomData}
     }
 
     #[inline]
-    pub fn gb(&self) -> Rg<T> {
-        Rg{r: self.g, g: self.b}
+    pub fn gb(&self) -> Rg<T, S> {
+        Rg{r: self.g, g: self.b, standard: PhantomData}
     }
 
     #[inline]
-    pub fn br(&self) -> Rg<T> {
-        Rg{r: self.b, g: self.r}
+    pub fn br(&self) -> Rg<T, S> {
+        Rg{r: self.b, g: self.r, standard: PhantomData}
     }
 
     #[inline]
-    pub fn bg(&self) -> Rg<T> {
-        Rg{r: self.b, g: self.g}
+    pub fn bg(&self) -> Rg<T, S> {
+        Rg{r: self.b, g: self.g, standard: PhantomData}
     }
 
     #[inline]
-    pub fn rgb(&self) -> Rgb<T> {
-        Rgb{r: self.r, g: self.g, b: self.b}
+    pub fn rgb(&self) -> Rgb<T, S> {
+        Rgb{r: self.r, g: self.g, b: self.b, standard: PhantomData}
     }
 
     #[inline]
-    pub fn rbg(&self) -> Rgb<T> {
-        Rgb{r: self.r, g: self.b, b: self.g}
+    pub fn rbg(&self) -> Rgb<T, S> {
+        Rgb{r: self.r, g: self.b, b: self.g, standard: PhantomData}
     }
 
     #[inline]
-    pub fn bgr(&self) -> Rgb<T> {
-        Rgb{r: self.b, g: self.g, b: self.r}
+    pub fn bgr(&self) -> Rgb<T, S> {
+        Rgb{r: self.b, g: self.g, b: self.r, standard: PhantomData}
     }
 
     #[inline]
-    pub fn brg(&self) -> Rgb<T> {
-        Rgb{r: self.b, g: self.r, b: self.g}
+    pub fn brg(&self) -> Rgb<T, S> {
+        Rgb{r: self.b, g: self.r, b: self.g, standard: PhantomData}
     }
 
     #[inline]
-    pub fn grb(&self) -> Rgb<T> {
-        Rgb{r: self.g, g: self.r, b: self.b}
+    pub fn grb(&self) -> Rgb<T, S> {
+        Rgb{r: self.g, g: self.r, b: self.b, standard: PhantomData}
     }
 
     #[inline]
-    pub fn gbr(&self) -> Rgb<T> {
-        Rgb{r: self.g, g: self.b, b: self.r}
+    pub fn gbr(&self) -> Rgb<T, S> {
+        Rgb{r: self.g, g: self.b, b: self.r, standard: PhantomData}
+    }
+}
+
+impl<T: Channel, S: TransferFunction> Rgb<T, S> {
+    pub fn to_standard<S2: TransferFunction>(&self) -> Rgb<T, S2>{
+        if std::any::TypeId::of::<S>() != std::any::TypeId::of::<S2>(){
+            let r = S2::from_linear(S::to_linear(self.r.to_nearest_precision_float()));
+            let g = S2::from_linear(S::to_linear(self.g.to_nearest_precision_float()));
+            let b = S2::from_linear(S::to_linear(self.b.to_nearest_precision_float()));
+            Rgb::new(r.to_channel(), g.to_channel(), b.to_channel())
+        }else{
+            Rgb::new(self.r, self.g, self.b)
+        }
+    }
+
+    pub fn to_linear(&self) -> Rgb<T, LinearRgb>{
+        let r = S::to_linear(self.r.to_nearest_precision_float());
+        let g = S::to_linear(self.g.to_nearest_precision_float());
+        let b = S::to_linear(self.b.to_nearest_precision_float());
+        Rgb::new(r.to_channel(), g.to_channel(), b.to_channel())
     }
 }
 
 #[macro_export]
 macro_rules! rgb{
     ( $r: expr, $g: expr, $b: expr ) => {
-        $crate::Rgb{ r: $r, g: $g, b: $b }
+        $crate::Rgb::<_, $crate::color_space::Srgb>::new( $r, $g, $b )
     };
     ( $rg: expr, $b: expr ) => {
-        $crate::Rgb{ r: $rg.r, g: $rg.g, b: $b }
+        $crate::Rgb::<_, $crate::color_space::Srgb>::new( $rg.r, $rg.g, $b )
     };
     ( $r: expr, $gb: expr ) => {
-        $crate::Rgb{ r: $r, g: $gb.r, b: $gb.g }
+        $crate::Rgb::<_, $crate::color_space::Srgb>::new( $r, $gb.r, $gb.g )
+    };
+    ( $num: expr ) => {
+        $crate::Rgb::<_, $crate::color_space::Srgb>::new( $num, $num, $num )
     };
 }
 
-impl<T:Channel> Color<T> for Rgb<T> {
+#[macro_export]
+macro_rules! rgb_linear{
+    ( $r: expr, $g: expr, $b: expr ) => {
+        $crate::Rgb::<_, $crate::color_space::LinearRgb>::new( $r, $g, $b )
+    };
+    ( $rg: expr, $b: expr ) => {
+        $crate::Rgb::<_, $crate::color_space::LinearRgb>::new( $rg.r, $rg.g, $b )
+    };
+    ( $r: expr, $gb: expr ) => {
+        $crate::Rgb::<_, $crate::color_space::LinearRgb>::new( $r, $gb.r, $gb.g )
+    };
+    ( $num: expr ) => {
+        $crate::Rgb::<_, $crate::color_space::LinearRgb>::new( $num, $num, $num )
+    };
+}
+
+impl<T: Channel, S> Color<T> for Rgb<T, S> {
     /// Clamps the components of the color to the range `(lo,hi)`.
     #[inline]
-    fn clamp_s(self, lo: T, hi: T) -> Rgb<T> {
+    fn clamp_s(self, lo: T, hi: T) -> Rgb<T, S> {
         Rgb::new(self.r.clamp(lo, hi),
                  self.g.clamp(lo, hi),
                  self.b.clamp(lo, hi))
@@ -132,7 +211,7 @@ impl<T:Channel> Color<T> for Rgb<T> {
 
     /// Clamps the components of the color component-wise between `lo` and `hi`.
     #[inline]
-    fn clamp_c(self, lo: Rgb<T>, hi: Rgb<T>) -> Rgb<T> {
+    fn clamp_c(self, lo: Rgb<T, S>, hi: Rgb<T, S>) -> Rgb<T, S> {
         Rgb::new(self.r.clamp(lo.r, hi.r),
                  self.g.clamp(lo.g, hi.g),
                  self.b.clamp(lo.b, hi.b))
@@ -140,7 +219,7 @@ impl<T:Channel> Color<T> for Rgb<T> {
 
     /// Inverts the color.
     #[inline]
-    fn inverse(self) -> Rgb<T> {
+    fn inverse(self) -> Rgb<T, S> {
         Rgb::new(self.r.invert_channel(),
                  self.g.invert_channel(),
                  self.b.invert_channel())
@@ -148,16 +227,16 @@ impl<T:Channel> Color<T> for Rgb<T> {
 
     #[inline]
     fn mix(self, other: Self, value: T) -> Self {
-        rgb!(self.r.mix(other.r, value),
+        Rgb::new(self.r.mix(other.r, value),
              self.g.mix(other.g, value),
              self.b.mix(other.b, value))
     }
 }
 
-impl<T:FloatChannel> FloatColor<T> for Rgb<T> {
+impl<T: FloatChannel, S> FloatColor<T> for Rgb<T, S> {
     /// Clamps the components of the color to the range `(0,1)`.
     #[inline]
-    fn saturate(self) -> Rgb<T> {
+    fn saturate(self) -> Rgb<T, S> {
         Rgb::new(self.r.saturate(),
                  self.g.saturate(),
                  self.b.saturate())
@@ -165,12 +244,14 @@ impl<T:FloatChannel> FloatColor<T> for Rgb<T> {
 }
 
 pub trait ToRgb {
-    fn to_rgb<U:Channel>(&self) -> Rgb<U>;
+    type Standard: TransferFunction;
+    fn to_rgb<U:Channel>(&self) -> Rgb<U, Self::Standard>;
 }
 
 impl ToRgb for u32 {
+    type Standard = Srgb;
     #[inline]
-    fn to_rgb<U:Channel>(&self) -> Rgb<U> {
+    fn to_rgb<U:Channel>(&self) -> Rgb<U, Srgb> {
         let r: u8 = cast((*self >> 16) & 0xff);
         let g: u8 = cast((*self >> 8) & 0xff);
         let b: u8 = cast((*self >> 0) & 0xff);
@@ -181,131 +262,40 @@ impl ToRgb for u32 {
     }
 }
 
-impl<T:Clone + Channel> ToRgb for Rgb<T> {
+impl<T: Channel, S: TransferFunction> ToRgb for Rgb<T,S> {
+    type Standard = S;
     #[inline]
-    fn to_rgb<U:Channel>(&self) -> Rgb<U> {
+    fn to_rgb<U:Channel>(&self) -> Rgb<U,S> {
         Rgb::new(self.r.to_channel(),
                  self.g.to_channel(),
                  self.b.to_channel())
     }
 }
 
-impl<T,C: ToRgb> ToRgb for AlphaColor<T, C> {
-    #[inline]
-    fn to_rgb<U:Channel>(&self) -> Rgb<U> {
-        self.c.to_rgb()
+impl<T: Channel, S: TransferFunction> ToLuma for Rgb<T, S> {
+    type Standard = S;
+    fn to_luma<U: Channel>(&self) -> Luma<U, S> {
+        Luma::new(Channel::from(
+            self.r.to_nearest_precision_float() * cast::<f32, <T as Channel>::NearestFloat>(0.2126)
+                + self.g.to_nearest_precision_float() * cast::<f32, <T as Channel>::NearestFloat>(0.7152)
+                + self.b.to_nearest_precision_float() * cast::<f32, <T as Channel>::NearestFloat>(0.0722)
+        ))
     }
 }
 
-impl<T:Channel> Mul for Rgb<T> {
-    type Output = Rgb<T>;
-
-    #[inline]
-    fn mul(self, rhs: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r.normalized_mul(rhs.r),
-                 self.g.normalized_mul(rhs.g),
-                 self.b.normalized_mul(rhs.b))
-    }
-}
-
-impl<T:Channel + Mul<T,Output=T>> Mul<T> for Rgb<T> {
-    type Output = Rgb<T>;
+impl<T: Channel, S: TransferFunction> ToRgba for Rgb<T, S> {
+    type Standard = S;
 
     #[inline]
-    fn mul(self, rhs: T) -> Rgb<T> {
-        Rgb::new(self.r * rhs,
-                 self.g * rhs,
-                 self.b * rhs)
+    fn to_rgba<U: Channel>(&self) -> Rgba<U, S>{
+        Rgba{c: self.to_rgb(), a: 1.0f32.to_channel()}
     }
 }
 
-
-impl<T:Channel> Div for Rgb<T> {
-    type Output = Rgb<T>;
-
+impl<T:Channel, S: TransferFunction> ToHsv for Rgb<T, S> {
+    type Standard = S;
     #[inline]
-    fn div(self, rhs: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r.normalized_div(rhs.r),
-                 self.g.normalized_div(rhs.g),
-                 self.b.normalized_div(rhs.b))
-    }
-}
-
-impl<T:Channel + Div<T,Output=T>> Div<T> for Rgb<T> {
-    type Output = Rgb<T>;
-
-    #[inline]
-    fn div(self, rhs: T) -> Rgb<T> {
-        Rgb::new(self.r / rhs,
-                 self.g / rhs,
-                 self.b / rhs)
-    }
-}
-
-impl<T:Channel + Add<T,Output=T>> Add for Rgb<T> {
-    type Output = Rgb<T>;
-
-    #[inline]
-    fn add(self, rhs: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r + rhs.r,
-                 self.g + rhs.g,
-                 self.b + rhs.b)
-    }
-}
-
-impl<T:Channel + Sub<T,Output=T>> Sub for Rgb<T> {
-    type Output = Rgb<T>;
-
-    #[inline]
-    fn sub(self, rhs: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r - rhs.r,
-                 self.g - rhs.g,
-                 self.b - rhs.b)
-    }
-}
-
-impl<T:Channel + Saturating> Saturating for Rgb<T> {
-    fn saturating_add(self, v: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r.saturating_add(v.r),
-            self.g.saturating_add(v.g),
-            self.b.saturating_add(v.b))
-    }
-
-    fn saturating_sub(self, v: Rgb<T>) -> Rgb<T> {
-        Rgb::new(self.r.saturating_sub(v.r),
-            self.g.saturating_sub(v.g),
-            self.b.saturating_sub(v.b))
-    }
-}
-
-impl<T> Index<usize> for Rgb<T> {
-    type Output = T;
-    fn index<'a>(&'a self, index: usize) -> &'a T {
-        self.as_ref().index(index)
-    }
-}
-
-impl<T> IndexMut<usize> for Rgb<T> {
-    fn index_mut<'a>(&'a mut self, index: usize) -> &'a mut T {
-        self.as_mut().index_mut(index)
-    }
-}
-
-impl<T> AsRef<[T;3]> for Rgb<T> {
-    fn as_ref(&self) -> &[T;3] {
-        unsafe{ mem::transmute(self) }
-    }
-}
-
-impl<T> AsMut<[T;3]> for Rgb<T> {
-    fn as_mut(&mut self) -> &mut [T;3] {
-        unsafe{ mem::transmute(self) }
-    }
-}
-
-impl<T:Channel + NumCast> ToHsv for Rgb<T> {
-    #[inline]
-    fn to_hsv<U:Channel + NumCast>(&self) -> Hsv<U> {
+    fn to_hsv<U:Channel + NumCast + Num>(&self) -> Hsv<U, S> {
         // Algorithm taken from the Wikipedia article on HSL and Hsv:
         // http://en.wikipedia.org/wiki/HSL_and_Hsv#From_Hsv
 
@@ -327,154 +317,270 @@ impl<T:Channel + NumCast> ToHsv for Rgb<T> {
             Hsv::new(Deg(h), s, mx)
 
         } else {
-            Hsv::new(Zero::zero(), Zero::zero(), mx)
+            Hsv::new(Zero::zero(), Zero::zero(),mx)
         }
+    }
+}
+
+impl<T: Channel, S: MatrixColorSpace + TransferFunction> ToXyz for Rgb<T, S> {
+    type WhitePoint = D65;
+    fn to_xyz<U: Channel + Float>(&self) -> Xyz<U, D65> {
+        let rgb = self.to_rgb().to_linear();
+        let xyz = S::to_xyz_matrix() * rgb.into();
+        Xyz::new(xyz[0], xyz[1], xyz[2])
+    }
+}
+
+impl<T: Channel, S> Mul for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn mul(self, rhs: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r.normalized_mul(rhs.r),
+                 self.g.normalized_mul(rhs.g),
+                 self.b.normalized_mul(rhs.b))
+    }
+}
+
+impl<T: Channel + Mul<T,Output=T>, S> Mul<T> for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn mul(self, rhs: T) -> Rgb<T, S> {
+        Rgb::new(self.r * rhs,
+                 self.g * rhs,
+                 self.b * rhs)
+    }
+}
+
+
+impl<T: Channel, S> Div for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn div(self, rhs: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r.normalized_div(rhs.r),
+                 self.g.normalized_div(rhs.g),
+                 self.b.normalized_div(rhs.b))
+    }
+}
+
+impl<T: Channel + Div<T,Output=T>, S> Div<T> for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn div(self, rhs: T) -> Rgb<T, S> {
+        Rgb::new(self.r / rhs,
+                 self.g / rhs,
+                 self.b / rhs)
+    }
+}
+
+impl<T: Channel + Add<T,Output=T>, S> Add for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn add(self, rhs: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r + rhs.r,
+                 self.g + rhs.g,
+                 self.b + rhs.b)
+    }
+}
+
+impl<T: Channel + Sub<T,Output=T>, S> Sub for Rgb<T, S> {
+    type Output = Rgb<T, S>;
+
+    #[inline]
+    fn sub(self, rhs: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r - rhs.r,
+                 self.g - rhs.g,
+                 self.b - rhs.b)
+    }
+}
+
+impl<T: Channel + Saturating, S> Saturating for Rgb<T, S> {
+    fn saturating_add(self, v: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r.saturating_add(v.r),
+            self.g.saturating_add(v.g),
+            self.b.saturating_add(v.b))
+    }
+
+    fn saturating_sub(self, v: Rgb<T, S>) -> Rgb<T, S> {
+        Rgb::new(self.r.saturating_sub(v.r),
+            self.g.saturating_sub(v.g),
+            self.b.saturating_sub(v.b))
+    }
+}
+
+impl<T, S> Index<usize> for Rgb<T, S> {
+    type Output = T;
+    fn index<'a>(&'a self, index: usize) -> &'a T {
+        self.as_ref().index(index)
+    }
+}
+
+impl<T, S> IndexMut<usize> for Rgb<T, S> {
+    fn index_mut<'a>(&'a mut self, index: usize) -> &'a mut T {
+        self.as_mut().index_mut(index)
+    }
+}
+
+impl<T, S> AsRef<[T;3]> for Rgb<T, S> {
+    fn as_ref(&self) -> &[T;3] {
+        unsafe{ mem::transmute(self) }
+    }
+}
+
+impl<T, S> AsMut<[T;3]> for Rgb<T, S> {
+    fn as_mut(&mut self) -> &mut [T;3] {
+        unsafe{ mem::transmute(self) }
     }
 }
 
 /// SVG 1.0 color constants: http://www.w3.org/TR/SVG/types.html#ColorKeywords
 pub mod consts {
     use Rgb;
+    use color_space::Srgb;
 
-    pub static ALICEBLUE:               Rgb<u8> = Rgb { r: 0xF0, g: 0xF8, b: 0xFF };
-    pub static ANTIQUEWHITE:            Rgb<u8> = Rgb { r: 0xFA, g: 0xEB, b: 0xD7 };
-    pub static AQUA:                    Rgb<u8> = Rgb { r: 0x00, g: 0xFF, b: 0xFF };
-    pub static AQUAMARINE:              Rgb<u8> = Rgb { r: 0x7F, g: 0xFF, b: 0xD4 };
-    pub static AZURE:                   Rgb<u8> = Rgb { r: 0xF0, g: 0xFF, b: 0xFF };
-    pub static BEIGE:                   Rgb<u8> = Rgb { r: 0xF5, g: 0xF5, b: 0xDC };
-    pub static BISQUE:                  Rgb<u8> = Rgb { r: 0xFF, g: 0xE4, b: 0xC4 };
-    pub static BLACK:                   Rgb<u8> = Rgb { r: 0x00, g: 0x00, b: 0x00 };
-    pub static BLANCHEDALMOND:          Rgb<u8> = Rgb { r: 0xFF, g: 0xEB, b: 0xCD };
-    pub static BLUE:                    Rgb<u8> = Rgb { r: 0x00, g: 0x00, b: 0xFF };
-    pub static BLUEVIOLET:              Rgb<u8> = Rgb { r: 0x8A, g: 0x2B, b: 0xE2 };
-    pub static BROWN:                   Rgb<u8> = Rgb { r: 0xA5, g: 0x2A, b: 0x2A };
-    pub static BURLYWOOD:               Rgb<u8> = Rgb { r: 0xDE, g: 0xB8, b: 0x87 };
-    pub static CADETBLUE:               Rgb<u8> = Rgb { r: 0x5F, g: 0x9E, b: 0xA0 };
-    pub static CHARTREUSE:              Rgb<u8> = Rgb { r: 0x7F, g: 0xFF, b: 0x00 };
-    pub static CHOCOLATE:               Rgb<u8> = Rgb { r: 0xD2, g: 0x69, b: 0x1E };
-    pub static CORAL:                   Rgb<u8> = Rgb { r: 0xFF, g: 0x7F, b: 0x50 };
-    pub static CORNFLOWERBLUE:          Rgb<u8> = Rgb { r: 0x64, g: 0x95, b: 0xED };
-    pub static CORNSILK:                Rgb<u8> = Rgb { r: 0xFF, g: 0xF8, b: 0xDC };
-    pub static CRIMSON:                 Rgb<u8> = Rgb { r: 0xDC, g: 0x14, b: 0x3C };
-    pub static CYAN:                    Rgb<u8> = Rgb { r: 0x00, g: 0xFF, b: 0xFF };
-    pub static DARKBLUE:                Rgb<u8> = Rgb { r: 0x00, g: 0x00, b: 0x8B };
-    pub static DARKCYAN:                Rgb<u8> = Rgb { r: 0x00, g: 0x8B, b: 0x8B };
-    pub static DARKGOLDENROD:           Rgb<u8> = Rgb { r: 0xB8, g: 0x86, b: 0x0B };
-    pub static DARKGRAY:                Rgb<u8> = Rgb { r: 0xA9, g: 0xA9, b: 0xA9 };
-    pub static DARKGREEN:               Rgb<u8> = Rgb { r: 0x00, g: 0x64, b: 0x00 };
-    pub static DARKKHAKI:               Rgb<u8> = Rgb { r: 0xBD, g: 0xB7, b: 0x6B };
-    pub static DARKMAGENTA:             Rgb<u8> = Rgb { r: 0x8B, g: 0x00, b: 0x8B };
-    pub static DARKOLIVEGREEN:          Rgb<u8> = Rgb { r: 0x55, g: 0x6B, b: 0x2F };
-    pub static DARKORANGE:              Rgb<u8> = Rgb { r: 0xFF, g: 0x8C, b: 0x00 };
-    pub static DARKORCHID:              Rgb<u8> = Rgb { r: 0x99, g: 0x32, b: 0xCC };
-    pub static DARKRED:                 Rgb<u8> = Rgb { r: 0x8B, g: 0x00, b: 0x00 };
-    pub static DARKSALMON:              Rgb<u8> = Rgb { r: 0xE9, g: 0x96, b: 0x7A };
-    pub static DARKSEAGREEN:            Rgb<u8> = Rgb { r: 0x8F, g: 0xBC, b: 0x8F };
-    pub static DARKSLATEBLUE:           Rgb<u8> = Rgb { r: 0x48, g: 0x3D, b: 0x8B };
-    pub static DARKSLATEGRAY:           Rgb<u8> = Rgb { r: 0x2F, g: 0x4F, b: 0x4F };
-    pub static DARKTURQUOISE:           Rgb<u8> = Rgb { r: 0x00, g: 0xCE, b: 0xD1 };
-    pub static DARKVIOLET:              Rgb<u8> = Rgb { r: 0x94, g: 0x00, b: 0xD3 };
-    pub static DEEPPINK:                Rgb<u8> = Rgb { r: 0xFF, g: 0x14, b: 0x93 };
-    pub static DEEPSKYBLUE:             Rgb<u8> = Rgb { r: 0x00, g: 0xBF, b: 0xFF };
-    pub static DIMGRAY:                 Rgb<u8> = Rgb { r: 0x69, g: 0x69, b: 0x69 };
-    pub static DODGERBLUE:              Rgb<u8> = Rgb { r: 0x1E, g: 0x90, b: 0xFF };
-    pub static FIREBRICK:               Rgb<u8> = Rgb { r: 0xB2, g: 0x22, b: 0x22 };
-    pub static FLORALWHITE:             Rgb<u8> = Rgb { r: 0xFF, g: 0xFA, b: 0xF0 };
-    pub static FORESTGREEN:             Rgb<u8> = Rgb { r: 0x22, g: 0x8B, b: 0x22 };
-    pub static FUCHSIA:                 Rgb<u8> = Rgb { r: 0xFF, g: 0x00, b: 0xFF };
-    pub static GAINSBORO:               Rgb<u8> = Rgb { r: 0xDC, g: 0xDC, b: 0xDC };
-    pub static GHOSTWHITE:              Rgb<u8> = Rgb { r: 0xF8, g: 0xF8, b: 0xFF };
-    pub static GOLD:                    Rgb<u8> = Rgb { r: 0xFF, g: 0xD7, b: 0x00 };
-    pub static GOLDENROD:               Rgb<u8> = Rgb { r: 0xDA, g: 0xA5, b: 0x20 };
-    pub static GRAY:                    Rgb<u8> = Rgb { r: 0x80, g: 0x80, b: 0x80 };
-    pub static GREEN:                   Rgb<u8> = Rgb { r: 0x00, g: 0x80, b: 0x00 };
-    pub static GREENYELLOW:             Rgb<u8> = Rgb { r: 0xAD, g: 0xFF, b: 0x2F };
-    pub static HONEYDEW:                Rgb<u8> = Rgb { r: 0xF0, g: 0xFF, b: 0xF0 };
-    pub static HOTPINK:                 Rgb<u8> = Rgb { r: 0xFF, g: 0x69, b: 0xB4 };
-    pub static INDIANRED:               Rgb<u8> = Rgb { r: 0xCD, g: 0x5C, b: 0x5C };
-    pub static INDIGO:                  Rgb<u8> = Rgb { r: 0x4B, g: 0x00, b: 0x82 };
-    pub static IVORY:                   Rgb<u8> = Rgb { r: 0xFF, g: 0xFF, b: 0xF0 };
-    pub static KHAKI:                   Rgb<u8> = Rgb { r: 0xF0, g: 0xE6, b: 0x8C };
-    pub static LAVENDER:                Rgb<u8> = Rgb { r: 0xE6, g: 0xE6, b: 0xFA };
-    pub static LAVENDERBLUSH:           Rgb<u8> = Rgb { r: 0xFF, g: 0xF0, b: 0xF5 };
-    pub static LAWNGREEN:               Rgb<u8> = Rgb { r: 0x7C, g: 0xFC, b: 0x00 };
-    pub static LEMONCHIFFON:            Rgb<u8> = Rgb { r: 0xFF, g: 0xFA, b: 0xCD };
-    pub static LIGHTBLUE:               Rgb<u8> = Rgb { r: 0xAD, g: 0xD8, b: 0xE6 };
-    pub static LIGHTCORAL:              Rgb<u8> = Rgb { r: 0xF0, g: 0x80, b: 0x80 };
-    pub static LIGHTCYAN:               Rgb<u8> = Rgb { r: 0xE0, g: 0xFF, b: 0xFF };
-    pub static LIGHTGOLDENRODYELLOW:    Rgb<u8> = Rgb { r: 0xFA, g: 0xFA, b: 0xD2 };
-    pub static LIGHTGREEN:              Rgb<u8> = Rgb { r: 0x90, g: 0xEE, b: 0x90 };
-    pub static LIGHTGREY:               Rgb<u8> = Rgb { r: 0xD3, g: 0xD3, b: 0xD3 };
-    pub static LIGHTPINK:               Rgb<u8> = Rgb { r: 0xFF, g: 0xB6, b: 0xC1 };
-    pub static LIGHTSALMON:             Rgb<u8> = Rgb { r: 0xFF, g: 0xA0, b: 0x7A };
-    pub static LIGHTSEAGREEN:           Rgb<u8> = Rgb { r: 0x20, g: 0xB2, b: 0xAA };
-    pub static LIGHTSKYBLUE:            Rgb<u8> = Rgb { r: 0x87, g: 0xCE, b: 0xFA };
-    pub static LIGHTSLATEGRAY:          Rgb<u8> = Rgb { r: 0x77, g: 0x88, b: 0x99 };
-    pub static LIGHTSTEELBLUE:          Rgb<u8> = Rgb { r: 0xB0, g: 0xC4, b: 0xDE };
-    pub static LIGHTYELLOW:             Rgb<u8> = Rgb { r: 0xFF, g: 0xFF, b: 0xE0 };
-    pub static LIME:                    Rgb<u8> = Rgb { r: 0x00, g: 0xFF, b: 0x00 };
-    pub static LIMEGREEN:               Rgb<u8> = Rgb { r: 0x32, g: 0xCD, b: 0x32 };
-    pub static LINEN:                   Rgb<u8> = Rgb { r: 0xFA, g: 0xF0, b: 0xE6 };
-    pub static MAGENTA:                 Rgb<u8> = Rgb { r: 0xFF, g: 0x00, b: 0xFF };
-    pub static MAROON:                  Rgb<u8> = Rgb { r: 0x80, g: 0x00, b: 0x00 };
-    pub static MEDIUMAQUAMARINE:        Rgb<u8> = Rgb { r: 0x66, g: 0xCD, b: 0xAA };
-    pub static MEDIUMBLUE:              Rgb<u8> = Rgb { r: 0x00, g: 0x00, b: 0xCD };
-    pub static MEDIUMORCHID:            Rgb<u8> = Rgb { r: 0xBA, g: 0x55, b: 0xD3 };
-    pub static MEDIUMPURPLE:            Rgb<u8> = Rgb { r: 0x93, g: 0x70, b: 0xDB };
-    pub static MEDIUMSEAGREEN:          Rgb<u8> = Rgb { r: 0x3C, g: 0xB3, b: 0x71 };
-    pub static MEDIUMSLATEBLUE:         Rgb<u8> = Rgb { r: 0x7B, g: 0x68, b: 0xEE };
-    pub static MEDIUMSPRINGGREEN:       Rgb<u8> = Rgb { r: 0x00, g: 0xFA, b: 0x9A };
-    pub static MEDIUMTURQUOISE:         Rgb<u8> = Rgb { r: 0x48, g: 0xD1, b: 0xCC };
-    pub static MEDIUMVIOLETRED:         Rgb<u8> = Rgb { r: 0xC7, g: 0x15, b: 0x85 };
-    pub static MIDNIGHTBLUE:            Rgb<u8> = Rgb { r: 0x19, g: 0x19, b: 0x70 };
-    pub static MINTCREAM:               Rgb<u8> = Rgb { r: 0xF5, g: 0xFF, b: 0xFA };
-    pub static MISTYROSE:               Rgb<u8> = Rgb { r: 0xFF, g: 0xE4, b: 0xE1 };
-    pub static MOCCASIN:                Rgb<u8> = Rgb { r: 0xFF, g: 0xE4, b: 0xB5 };
-    pub static NAVAJOWHITE:             Rgb<u8> = Rgb { r: 0xFF, g: 0xDE, b: 0xAD };
-    pub static NAVY:                    Rgb<u8> = Rgb { r: 0x00, g: 0x00, b: 0x80 };
-    pub static OLDLACE:                 Rgb<u8> = Rgb { r: 0xFD, g: 0xF5, b: 0xE6 };
-    pub static OLIVE:                   Rgb<u8> = Rgb { r: 0x80, g: 0x80, b: 0x00 };
-    pub static OLIVEDRAB:               Rgb<u8> = Rgb { r: 0x6B, g: 0x8E, b: 0x23 };
-    pub static ORANGE:                  Rgb<u8> = Rgb { r: 0xFF, g: 0xA5, b: 0x00 };
-    pub static ORANGERED:               Rgb<u8> = Rgb { r: 0xFF, g: 0x45, b: 0x00 };
-    pub static ORCHID:                  Rgb<u8> = Rgb { r: 0xDA, g: 0x70, b: 0xD6 };
-    pub static PALEGOLDENROD:           Rgb<u8> = Rgb { r: 0xEE, g: 0xE8, b: 0xAA };
-    pub static PALEGREEN:               Rgb<u8> = Rgb { r: 0x98, g: 0xFB, b: 0x98 };
-    pub static PALEVIOLETRED:           Rgb<u8> = Rgb { r: 0xDB, g: 0x70, b: 0x93 };
-    pub static PAPAYAWHIP:              Rgb<u8> = Rgb { r: 0xFF, g: 0xEF, b: 0xD5 };
-    pub static PEACHPUFF:               Rgb<u8> = Rgb { r: 0xFF, g: 0xDA, b: 0xB9 };
-    pub static PERU:                    Rgb<u8> = Rgb { r: 0xCD, g: 0x85, b: 0x3F };
-    pub static PINK:                    Rgb<u8> = Rgb { r: 0xFF, g: 0xC0, b: 0xCB };
-    pub static PLUM:                    Rgb<u8> = Rgb { r: 0xDD, g: 0xA0, b: 0xDD };
-    pub static POWDERBLUE:              Rgb<u8> = Rgb { r: 0xB0, g: 0xE0, b: 0xE6 };
-    pub static PURPLE:                  Rgb<u8> = Rgb { r: 0x80, g: 0x00, b: 0x80 };
-    pub static RED:                     Rgb<u8> = Rgb { r: 0xFF, g: 0x00, b: 0x00 };
-    pub static ROSYBROWN:               Rgb<u8> = Rgb { r: 0xBC, g: 0x8F, b: 0x8F };
-    pub static ROYALBLUE:               Rgb<u8> = Rgb { r: 0x41, g: 0x69, b: 0xE1 };
-    pub static SADDLEBROWN:             Rgb<u8> = Rgb { r: 0x8B, g: 0x45, b: 0x13 };
-    pub static SALMON:                  Rgb<u8> = Rgb { r: 0xFA, g: 0x80, b: 0x72 };
-    pub static SANDYBROWN:              Rgb<u8> = Rgb { r: 0xFA, g: 0xA4, b: 0x60 };
-    pub static SEAGREEN:                Rgb<u8> = Rgb { r: 0x2E, g: 0x8B, b: 0x57 };
-    pub static SEASHELL:                Rgb<u8> = Rgb { r: 0xFF, g: 0xF5, b: 0xEE };
-    pub static SIENNA:                  Rgb<u8> = Rgb { r: 0xA0, g: 0x52, b: 0x2D };
-    pub static SILVER:                  Rgb<u8> = Rgb { r: 0xC0, g: 0xC0, b: 0xC0 };
-    pub static SKYBLUE:                 Rgb<u8> = Rgb { r: 0x87, g: 0xCE, b: 0xEB };
-    pub static SLATEBLUE:               Rgb<u8> = Rgb { r: 0x6A, g: 0x5A, b: 0xCD };
-    pub static SLATEGRAY:               Rgb<u8> = Rgb { r: 0x70, g: 0x80, b: 0x90 };
-    pub static SNOW:                    Rgb<u8> = Rgb { r: 0xFF, g: 0xFA, b: 0xFA };
-    pub static SPRINGGREEN:             Rgb<u8> = Rgb { r: 0x00, g: 0xFF, b: 0x7F };
-    pub static STEELBLUE:               Rgb<u8> = Rgb { r: 0x46, g: 0x82, b: 0xB4 };
-    pub static TAN:                     Rgb<u8> = Rgb { r: 0xD2, g: 0xB4, b: 0x8C };
-    pub static TEAL:                    Rgb<u8> = Rgb { r: 0x00, g: 0x80, b: 0x80 };
-    pub static THISTLE:                 Rgb<u8> = Rgb { r: 0xD8, g: 0xBF, b: 0xD8 };
-    pub static TOMATO:                  Rgb<u8> = Rgb { r: 0xFF, g: 0x63, b: 0x47 };
-    pub static TURQUOISE:               Rgb<u8> = Rgb { r: 0x40, g: 0xE0, b: 0xD0 };
-    pub static VIOLET:                  Rgb<u8> = Rgb { r: 0xEE, g: 0x82, b: 0xEE };
-    pub static WHEAT:                   Rgb<u8> = Rgb { r: 0xF5, g: 0xDE, b: 0xB3 };
-    pub static WHITE:                   Rgb<u8> = Rgb { r: 0xFF, g: 0xFF, b: 0xFF };
-    pub static WHITESMOKE:              Rgb<u8> = Rgb { r: 0xF5, g: 0xF5, b: 0xF5 };
-    pub static YELLOW:                  Rgb<u8> = Rgb { r: 0xFF, g: 0xFF, b: 0x00 };
-    pub static YELLOWGREEN:             Rgb<u8> = Rgb { r: 0x9A, g: 0xCD, b: 0x32 };
+    pub static ALICEBLUE:               Rgb<u8, Srgb> = Rgb::new(0xF0, 0xF8, 0xFF);
+    pub static ANTIQUEWHITE:            Rgb<u8, Srgb> = Rgb::new(0xFA, 0xEB, 0xD7);
+    pub static AQUA:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0xFF, 0xFF);
+    pub static AQUAMARINE:              Rgb<u8, Srgb> = Rgb::new(0x7F, 0xFF, 0xD4);
+    pub static AZURE:                   Rgb<u8, Srgb> = Rgb::new(0xF0, 0xFF, 0xFF);
+    pub static BEIGE:                   Rgb<u8, Srgb> = Rgb::new(0xF5, 0xF5, 0xDC);
+    pub static BISQUE:                  Rgb<u8, Srgb> = Rgb::new(0xFF, 0xE4, 0xC4);
+    pub static BLACK:                   Rgb<u8, Srgb> = Rgb::new(0x00, 0x00, 0x00);
+    pub static BLANCHEDALMOND:          Rgb<u8, Srgb> = Rgb::new(0xFF, 0xEB, 0xCD);
+    pub static BLUE:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0x00, 0xFF);
+    pub static BLUEVIOLET:              Rgb<u8, Srgb> = Rgb::new(0x8A, 0x2B, 0xE2);
+    pub static BROWN:                   Rgb<u8, Srgb> = Rgb::new(0xA5, 0x2A, 0x2A);
+    pub static BURLYWOOD:               Rgb<u8, Srgb> = Rgb::new(0xDE, 0xB8, 0x87);
+    pub static CADETBLUE:               Rgb<u8, Srgb> = Rgb::new(0x5F, 0x9E, 0xA0);
+    pub static CHARTREUSE:              Rgb<u8, Srgb> = Rgb::new(0x7F, 0xFF, 0x00);
+    pub static CHOCOLATE:               Rgb<u8, Srgb> = Rgb::new(0xD2, 0x69, 0x1E);
+    pub static CORAL:                   Rgb<u8, Srgb> = Rgb::new(0xFF, 0x7F, 0x50);
+    pub static CORNFLOWERBLUE:          Rgb<u8, Srgb> = Rgb::new(0x64, 0x95, 0xED);
+    pub static CORNSILK:                Rgb<u8, Srgb> = Rgb::new(0xFF, 0xF8, 0xDC);
+    pub static CRIMSON:                 Rgb<u8, Srgb> = Rgb::new(0xDC, 0x14, 0x3C);
+    pub static CYAN:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0xFF, 0xFF);
+    pub static DARKBLUE:                Rgb<u8, Srgb> = Rgb::new(0x00, 0x00, 0x8B);
+    pub static DARKCYAN:                Rgb<u8, Srgb> = Rgb::new(0x00, 0x8B, 0x8B);
+    pub static DARKGOLDENROD:           Rgb<u8, Srgb> = Rgb::new(0xB8, 0x86, 0x0B);
+    pub static DARKGRAY:                Rgb<u8, Srgb> = Rgb::new(0xA9, 0xA9, 0xA9);
+    pub static DARKGREEN:               Rgb<u8, Srgb> = Rgb::new(0x00, 0x64, 0x00);
+    pub static DARKKHAKI:               Rgb<u8, Srgb> = Rgb::new(0xBD, 0xB7, 0x6B);
+    pub static DARKMAGENTA:             Rgb<u8, Srgb> = Rgb::new(0x8B, 0x00, 0x8B);
+    pub static DARKOLIVEGREEN:          Rgb<u8, Srgb> = Rgb::new(0x55, 0x6B, 0x2F);
+    pub static DARKORANGE:              Rgb<u8, Srgb> = Rgb::new(0xFF, 0x8C, 0x00);
+    pub static DARKORCHID:              Rgb<u8, Srgb> = Rgb::new(0x99, 0x32, 0xCC);
+    pub static DARKRED:                 Rgb<u8, Srgb> = Rgb::new(0x8B, 0x00, 0x00);
+    pub static DARKSALMON:              Rgb<u8, Srgb> = Rgb::new(0xE9, 0x96, 0x7A);
+    pub static DARKSEAGREEN:            Rgb<u8, Srgb> = Rgb::new(0x8F, 0xBC, 0x8F);
+    pub static DARKSLATEBLUE:           Rgb<u8, Srgb> = Rgb::new(0x48, 0x3D, 0x8B);
+    pub static DARKSLATEGRAY:           Rgb<u8, Srgb> = Rgb::new(0x2F, 0x4F, 0x4F);
+    pub static DARKTURQUOISE:           Rgb<u8, Srgb> = Rgb::new(0x00, 0xCE, 0xD1);
+    pub static DARKVIOLET:              Rgb<u8, Srgb> = Rgb::new(0x94, 0x00, 0xD3);
+    pub static DEEPPINK:                Rgb<u8, Srgb> = Rgb::new(0xFF, 0x14, 0x93);
+    pub static DEEPSKYBLUE:             Rgb<u8, Srgb> = Rgb::new(0x00, 0xBF, 0xFF);
+    pub static DIMGRAY:                 Rgb<u8, Srgb> = Rgb::new(0x69, 0x69, 0x69);
+    pub static DODGERBLUE:              Rgb<u8, Srgb> = Rgb::new(0x1E, 0x90, 0xFF);
+    pub static FIREBRICK:               Rgb<u8, Srgb> = Rgb::new(0xB2, 0x22, 0x22);
+    pub static FLORALWHITE:             Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFA, 0xF0);
+    pub static FORESTGREEN:             Rgb<u8, Srgb> = Rgb::new(0x22, 0x8B, 0x22);
+    pub static FUCHSIA:                 Rgb<u8, Srgb> = Rgb::new(0xFF, 0x00, 0xFF);
+    pub static GAINSBORO:               Rgb<u8, Srgb> = Rgb::new(0xDC, 0xDC, 0xDC);
+    pub static GHOSTWHITE:              Rgb<u8, Srgb> = Rgb::new(0xF8, 0xF8, 0xFF);
+    pub static GOLD:                    Rgb<u8, Srgb> = Rgb::new(0xFF, 0xD7, 0x00);
+    pub static GOLDENROD:               Rgb<u8, Srgb> = Rgb::new(0xDA, 0xA5, 0x20);
+    pub static GRAY:                    Rgb<u8, Srgb> = Rgb::new(0x80, 0x80, 0x80);
+    pub static GREEN:                   Rgb<u8, Srgb> = Rgb::new(0x00, 0x80, 0x00);
+    pub static GREENYELLOW:             Rgb<u8, Srgb> = Rgb::new(0xAD, 0xFF, 0x2F);
+    pub static HONEYDEW:                Rgb<u8, Srgb> = Rgb::new(0xF0, 0xFF, 0xF0);
+    pub static HOTPINK:                 Rgb<u8, Srgb> = Rgb::new(0xFF, 0x69, 0xB4);
+    pub static INDIANRED:               Rgb<u8, Srgb> = Rgb::new(0xCD, 0x5C, 0x5C);
+    pub static INDIGO:                  Rgb<u8, Srgb> = Rgb::new(0x4B, 0x00, 0x82);
+    pub static IVORY:                   Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFF, 0xF0);
+    pub static KHAKI:                   Rgb<u8, Srgb> = Rgb::new(0xF0, 0xE6, 0x8C);
+    pub static LAVENDER:                Rgb<u8, Srgb> = Rgb::new(0xE6, 0xE6, 0xFA);
+    pub static LAVENDERBLUSH:           Rgb<u8, Srgb> = Rgb::new(0xFF, 0xF0, 0xF5);
+    pub static LAWNGREEN:               Rgb<u8, Srgb> = Rgb::new(0x7C, 0xFC, 0x00);
+    pub static LEMONCHIFFON:            Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFA, 0xCD);
+    pub static LIGHTBLUE:               Rgb<u8, Srgb> = Rgb::new(0xAD, 0xD8, 0xE6);
+    pub static LIGHTCORAL:              Rgb<u8, Srgb> = Rgb::new(0xF0, 0x80, 0x80);
+    pub static LIGHTCYAN:               Rgb<u8, Srgb> = Rgb::new(0xE0, 0xFF, 0xFF);
+    pub static LIGHTGOLDENRODYELLOW:    Rgb<u8, Srgb> = Rgb::new(0xFA, 0xFA, 0xD2);
+    pub static LIGHTGREEN:              Rgb<u8, Srgb> = Rgb::new(0x90, 0xEE, 0x90);
+    pub static LIGHTGREY:               Rgb<u8, Srgb> = Rgb::new(0xD3, 0xD3, 0xD3);
+    pub static LIGHTPINK:               Rgb<u8, Srgb> = Rgb::new(0xFF, 0xB6, 0xC1);
+    pub static LIGHTSALMON:             Rgb<u8, Srgb> = Rgb::new(0xFF, 0xA0, 0x7A);
+    pub static LIGHTSEAGREEN:           Rgb<u8, Srgb> = Rgb::new(0x20, 0xB2, 0xAA);
+    pub static LIGHTSKYBLUE:            Rgb<u8, Srgb> = Rgb::new(0x87, 0xCE, 0xFA);
+    pub static LIGHTSLATEGRAY:          Rgb<u8, Srgb> = Rgb::new(0x77, 0x88, 0x99);
+    pub static LIGHTSTEELBLUE:          Rgb<u8, Srgb> = Rgb::new(0xB0, 0xC4, 0xDE);
+    pub static LIGHTYELLOW:             Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFF, 0xE0);
+    pub static LIME:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0xFF, 0x00);
+    pub static LIMEGREEN:               Rgb<u8, Srgb> = Rgb::new(0x32, 0xCD, 0x32);
+    pub static LINEN:                   Rgb<u8, Srgb> = Rgb::new(0xFA, 0xF0, 0xE6);
+    pub static MAGENTA:                 Rgb<u8, Srgb> = Rgb::new(0xFF, 0x00, 0xFF);
+    pub static MAROON:                  Rgb<u8, Srgb> = Rgb::new(0x80, 0x00, 0x00);
+    pub static MEDIUMAQUAMARINE:        Rgb<u8, Srgb> = Rgb::new(0x66, 0xCD, 0xAA);
+    pub static MEDIUMBLUE:              Rgb<u8, Srgb> = Rgb::new(0x00, 0x00, 0xCD);
+    pub static MEDIUMORCHID:            Rgb<u8, Srgb> = Rgb::new(0xBA, 0x55, 0xD3);
+    pub static MEDIUMPURPLE:            Rgb<u8, Srgb> = Rgb::new(0x93, 0x70, 0xDB);
+    pub static MEDIUMSEAGREEN:          Rgb<u8, Srgb> = Rgb::new(0x3C, 0xB3, 0x71);
+    pub static MEDIUMSLATEBLUE:         Rgb<u8, Srgb> = Rgb::new(0x7B, 0x68, 0xEE);
+    pub static MEDIUMSPRINGGREEN:       Rgb<u8, Srgb> = Rgb::new(0x00, 0xFA, 0x9A);
+    pub static MEDIUMTURQUOISE:         Rgb<u8, Srgb> = Rgb::new(0x48, 0xD1, 0xCC);
+    pub static MEDIUMVIOLETRED:         Rgb<u8, Srgb> = Rgb::new(0xC7, 0x15, 0x85);
+    pub static MIDNIGHTBLUE:            Rgb<u8, Srgb> = Rgb::new(0x19, 0x19, 0x70);
+    pub static MINTCREAM:               Rgb<u8, Srgb> = Rgb::new(0xF5, 0xFF, 0xFA);
+    pub static MISTYROSE:               Rgb<u8, Srgb> = Rgb::new(0xFF, 0xE4, 0xE1);
+    pub static MOCCASIN:                Rgb<u8, Srgb> = Rgb::new(0xFF, 0xE4, 0xB5);
+    pub static NAVAJOWHITE:             Rgb<u8, Srgb> = Rgb::new(0xFF, 0xDE, 0xAD);
+    pub static NAVY:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0x00, 0x80);
+    pub static OLDLACE:                 Rgb<u8, Srgb> = Rgb::new(0xFD, 0xF5, 0xE6);
+    pub static OLIVE:                   Rgb<u8, Srgb> = Rgb::new(0x80, 0x80, 0x00);
+    pub static OLIVEDRAB:               Rgb<u8, Srgb> = Rgb::new(0x6B, 0x8E, 0x23);
+    pub static ORANGE:                  Rgb<u8, Srgb> = Rgb::new(0xFF, 0xA5, 0x00);
+    pub static ORANGERED:               Rgb<u8, Srgb> = Rgb::new(0xFF, 0x45, 0x00);
+    pub static ORCHID:                  Rgb<u8, Srgb> = Rgb::new(0xDA, 0x70, 0xD6);
+    pub static PALEGOLDENROD:           Rgb<u8, Srgb> = Rgb::new(0xEE, 0xE8, 0xAA);
+    pub static PALEGREEN:               Rgb<u8, Srgb> = Rgb::new(0x98, 0xFB, 0x98);
+    pub static PALEVIOLETRED:           Rgb<u8, Srgb> = Rgb::new(0xDB, 0x70, 0x93);
+    pub static PAPAYAWHIP:              Rgb<u8, Srgb> = Rgb::new(0xFF, 0xEF, 0xD5);
+    pub static PEACHPUFF:               Rgb<u8, Srgb> = Rgb::new(0xFF, 0xDA, 0xB9);
+    pub static PERU:                    Rgb<u8, Srgb> = Rgb::new(0xCD, 0x85, 0x3F);
+    pub static PINK:                    Rgb<u8, Srgb> = Rgb::new(0xFF, 0xC0, 0xCB);
+    pub static PLUM:                    Rgb<u8, Srgb> = Rgb::new(0xDD, 0xA0, 0xDD);
+    pub static POWDERBLUE:              Rgb<u8, Srgb> = Rgb::new(0xB0, 0xE0, 0xE6);
+    pub static PURPLE:                  Rgb<u8, Srgb> = Rgb::new(0x80, 0x00, 0x80);
+    pub static RED:                     Rgb<u8, Srgb> = Rgb::new(0xFF, 0x00, 0x00);
+    pub static ROSYBROWN:               Rgb<u8, Srgb> = Rgb::new(0xBC, 0x8F, 0x8F);
+    pub static ROYALBLUE:               Rgb<u8, Srgb> = Rgb::new(0x41, 0x69, 0xE1);
+    pub static SADDLEBROWN:             Rgb<u8, Srgb> = Rgb::new(0x8B, 0x45, 0x13);
+    pub static SALMON:                  Rgb<u8, Srgb> = Rgb::new(0xFA, 0x80, 0x72);
+    pub static SANDYBROWN:              Rgb<u8, Srgb> = Rgb::new(0xFA, 0xA4, 0x60);
+    pub static SEAGREEN:                Rgb<u8, Srgb> = Rgb::new(0x2E, 0x8B, 0x57);
+    pub static SEASHELL:                Rgb<u8, Srgb> = Rgb::new(0xFF, 0xF5, 0xEE);
+    pub static SIENNA:                  Rgb<u8, Srgb> = Rgb::new(0xA0, 0x52, 0x2D);
+    pub static SILVER:                  Rgb<u8, Srgb> = Rgb::new(0xC0, 0xC0, 0xC0);
+    pub static SKYBLUE:                 Rgb<u8, Srgb> = Rgb::new(0x87, 0xCE, 0xEB);
+    pub static SLATEBLUE:               Rgb<u8, Srgb> = Rgb::new(0x6A, 0x5A, 0xCD);
+    pub static SLATEGRAY:               Rgb<u8, Srgb> = Rgb::new(0x70, 0x80, 0x90);
+    pub static SNOW:                    Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFA, 0xFA);
+    pub static SPRINGGREEN:             Rgb<u8, Srgb> = Rgb::new(0x00, 0xFF, 0x7F);
+    pub static STEELBLUE:               Rgb<u8, Srgb> = Rgb::new(0x46, 0x82, 0xB4);
+    pub static TAN:                     Rgb<u8, Srgb> = Rgb::new(0xD2, 0xB4, 0x8C);
+    pub static TEAL:                    Rgb<u8, Srgb> = Rgb::new(0x00, 0x80, 0x80);
+    pub static THISTLE:                 Rgb<u8, Srgb> = Rgb::new(0xD8, 0xBF, 0xD8);
+    pub static TOMATO:                  Rgb<u8, Srgb> = Rgb::new(0xFF, 0x63, 0x47);
+    pub static TURQUOISE:               Rgb<u8, Srgb> = Rgb::new(0x40, 0xE0, 0xD0);
+    pub static VIOLET:                  Rgb<u8, Srgb> = Rgb::new(0xEE, 0x82, 0xEE);
+    pub static WHEAT:                   Rgb<u8, Srgb> = Rgb::new(0xF5, 0xDE, 0xB3);
+    pub static WHITE:                   Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFF, 0xFF);
+    pub static WHITESMOKE:              Rgb<u8, Srgb> = Rgb::new(0xF5, 0xF5, 0xF5);
+    pub static YELLOW:                  Rgb<u8, Srgb> = Rgb::new(0xFF, 0xFF, 0x00);
+    pub static YELLOWGREEN:             Rgb<u8, Srgb> = Rgb::new(0x9A, 0xCD, 0x32);
 }
 
 #[cfg(test)]

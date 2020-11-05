@@ -42,7 +42,7 @@ impl<T: Copy, S> Copy for Hsv<T, S>{}
 impl<N: Clone + PartialEq + Num + NumCast, S> PartialEq for Hsv<N, S>{
 	#[inline]
 	fn eq(&self, other: &Hsv<N, S>) -> bool{
-		self.h.eq(&other.h) && self.s.eq(&other.s) && self.v.eq(&other.v)
+		self.h.wrap().eq(other.h.wrap()) && self.s.eq(&other.s) && self.v.eq(&other.v)
 	}
 }
 

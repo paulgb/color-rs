@@ -17,6 +17,10 @@ extern crate angle;
 extern crate serde;
 extern crate half;
 #[macro_use] extern crate serde_derive;
+#[cfg(feature="kmeans")]
+extern crate kmeans_colors;
+#[cfg(feature="kmeans")]
+extern crate rand;
 
 pub use alpha::AlphaColor;
 pub use alpha::{Rgba, Hsva, YCbCra, ToRgba, LumaA};
@@ -43,6 +47,8 @@ mod xyz;
 mod yxy;
 mod lab;
 pub mod color_space;
+#[cfg(feature="kmeans")]
+pub mod kmeans;
 
 pub trait Color<T>: Copy {
     fn clamp_s(self, lo: T, hi: T) -> Self;

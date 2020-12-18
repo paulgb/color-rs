@@ -15,6 +15,12 @@ angle = "0.4"
 half = "*"
 serde={version = "1"}
 serde_derive={version = "1"}
+kmeans_colors = { version = "0.3.4", default-features=false, optional = true }
+rand = { version = "0.7.3", optional = true }
+
+[features]
+kmeans = ["kmeans_colors", "rand"]
+default = []
 
 [patch.crates-io]
 # angle = {path = "../rinlibs/angle-rs"}

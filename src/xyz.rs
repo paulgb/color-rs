@@ -63,31 +63,21 @@ impl<T: Channel + Float + Clone> ToRgb for Xyz<T, D65> {
 impl<T: Channel + Float + NumCast, Wp: WhitePoint> ToLab for Xyz<T, Wp> {
     type WhitePoint = Wp;
     fn to_lab<U:Channel>(&self) -> Lab<U, Wp> {
-        let xr = self.x / Wp::xyz().x;
-        let yr = self.y / Wp::xyz().y;
-        let zr = self.z / Wp::xyz().z;
-        let e: T = cast::<u32, T>(216).unwrap() / cast(24389).unwrap();
-        let k: T = cast::<u32, T>(24389).unwrap() / cast(27).unwrap();
-        let d: T = cast::<u32, T>(16).unwrap() / cast(116).unwrap();
-        let fx = if xr > e {
-            xr.cbrt()
-        }else{
-            k * xr + d
-        };
-        let fy = if yr > e {
-            yr.cbrt()
-        }else{
-            k * yr + d
-        };
-        let fz = if zr > e {
-            zr.cbrt()
-        }else{
-            k * zr + d
-        };
-        let l: T = cast::<u32, T>(116).unwrap() * fy - cast(16).unwrap();
-        let a: T = cast::<u32, T>(500).unwrap() * (fx - fy);
-        let b: T = cast::<u32, T>(200).unwrap() * (fy - fz);
-        Lab{l: l.to_channel(), a: a.to_channel(), b: b.to_channel(), white_point: Wp::default()}
+        let mut xyz = [self.x / Wp::xyz().x , self.y / Wp::xyz().y, self.z / Wp::xyz().z];
+        for i in 0..3 {
+            if xyz[i] > cast::<_, T>(216.0).unwrap() / cast(24389.).unwrap() {// See BruceLindbloom.com
+                xyz[i] = xyz[i].cbrt()
+            }else{
+                let k = cast::<_, T>(24389.0).unwrap() / cast(27).unwrap(); // See BruceLindbloom.com
+                xyz[i] = (cast::<_, T>(16.0).unwrap() + k * xyz[i]) / cast(116).unwrap()
+            }
+        }
+
+        return Lab::new(
+            (cast::<_, T>(116.0).unwrap() * xyz[1] - cast(16).unwrap()).to_channel(),
+            (cast::<_, T>(500).unwrap() * (xyz[0] - xyz[1])).to_channel(),
+            (cast::<_, T>(200).unwrap() * (xyz[1] - xyz[2])).to_channel()
+        )
     }
 }
 

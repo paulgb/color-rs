@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use num_traits::{self, Zero, Saturating, NumCast, Num, Float};
-use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
+use std::{borrow::{Borrow, BorrowMut}, ops::{Mul, Div, Add, Sub, Index, IndexMut}};
 use std::marker::PhantomData;
 use std::mem;
 use color_space::{TransferFunction, Srgb, LinearRgb, MatrixColorSpace, D65, Vec3};
@@ -434,6 +434,18 @@ impl<T, S> AsRef<[T;3]> for Rgb<T, S> {
 impl<T, S> AsMut<[T;3]> for Rgb<T, S> {
     fn as_mut(&mut self) -> &mut [T;3] {
         unsafe{ mem::transmute(self) }
+    }
+}
+
+impl<T, S> Borrow<[T;3]> for Rgb<T, S> {
+    fn borrow(&self) -> &[T;3] {
+        unsafe{ mem::transmute(self)}
+    }
+}
+
+impl<T, S> BorrowMut<[T;3]> for Rgb<T, S> {
+    fn borrow_mut(&mut self) -> &mut [T;3] {
+        unsafe{ mem::transmute(self)}
     }
 }
 

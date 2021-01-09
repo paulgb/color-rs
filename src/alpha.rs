@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ops::{Mul, Div, Add, Sub, Index, IndexMut};
+use std::{borrow::{Borrow, BorrowMut}, ops::{Mul, Div, Add, Sub, Index, IndexMut}};
 use color_space::TransferFunction;
 use num_traits::Saturating;
 use std::mem;
@@ -544,6 +544,18 @@ impl<T, C: AsRef<[T;3]>> AsRef<[T;4]> for AlphaColor<T,C> {
 
 impl<T, C: AsMut<[T;3]>> AsMut<[T;4]> for AlphaColor<T,C> {
     fn as_mut(&mut self) -> &mut [T;4] {
+        unsafe{ mem::transmute(self)}
+    }
+}
+
+impl<T, C: Borrow<[T;3]>> Borrow<[T;4]> for AlphaColor<T,C> {
+    fn borrow(&self) -> &[T;4] {
+        unsafe{ mem::transmute(self)}
+    }
+}
+
+impl<T, C: BorrowMut<[T;3]>> BorrowMut<[T;4]> for AlphaColor<T,C> {
+    fn borrow_mut(&mut self) -> &mut [T;4] {
         unsafe{ mem::transmute(self)}
     }
 }
